@@ -10,6 +10,7 @@ mission/
 ├── hardware.py      하드웨어 래퍼 (Drive / Servos / Arm / Ultrasonic / Gyro / Camera / QR)
 ├── missions.py      Mission1 ~ Mission5 클래스, PrecisionStopper(정밀 정지), PickPlaceTask(집기/놓기)
 ├── run_mission.py   실행 진입점 + 점검 도구 (--calibrate, --test-* ...)
+├── debug_tool.py    디버그 웹 화면: 카메라/QR 인식 상태 확인 + 서보 각도 확인·조절
 └── logs/            실행 로그(run_*.log), 결과(result_*.json), 카메라 스냅샷(qr_last.jpg)
 ```
 
@@ -57,6 +58,23 @@ python3 run_mission.py --continue-on-error     # 한 미션이 실패해도 끝�
 조향 중립도 같은 값을 씁니다. RPIservo.py 를 못 읽으면 `config.py` 의 `ARM_POSES["home"]` / 조향 90.
 기본값 대신 config 값을 쓰려면 `USE_ADEEPT_INIT_AS_HOME = False`.
 
+### 디버그 화면 (debug_tool.py)
+
+QR 이 잘 안 읽히거나 팔 각도를 찾을 때 씁니다. 파이에서 실행하고, 같은 와이파이의 노트북/폰 브라우저로 접속합니다.
+
+```bash
+python3 debug_tool.py          # 터미널에 나오는 주소(http://파이IP:8000)를 브라우저로 열기. 끝내려면 Ctrl+C
+```
+
+* **카메라 + QR 인식**: 실시간 화면에 QR 테두리를 그립니다 (초록 = 읽힘, 노랑 = QR 은 보이는데 해독 실패).
+  밝기·선명도·QR 크기(px)·연속 인식 횟수와 안 읽히는 이유 힌트가 나옵니다.
+  **[분석]** 을 누르면 지금 화면을 여러 방법(확대, 대비 향상, 이진화, 좌우 반전 ...)으로 읽어 보고 어떤 방법이 되는지 표로 보여 줍니다.
+* **카메라 조절**: ExposureValue(밝기 보정) / Contrast / Sharpness. 잘 읽히는 값이 나오면 화면의 `CAMERA_CONTROLS = {...}` 줄을 `config.py` 에.
+* **서보**: steer / base / shoulder / wrist / grip 의 현재 각도, ± 스텝이나 숫자로 이동 (키보드 a/d, w/s, i/k, [ ], , . 도 가능).
+  config 포즈로 이동, 집게 열기/닫기, base 좌/우, 모터 초기화.
+* **config 에 붙여넣기**: 지금 각도를 `{CH_SHOULDER: 138, CH_WRIST: 105}` 같은 형식으로 보여 줍니다. 스펀지를 잡을 수 있는 각도를 찾으면
+  이름을 적고 **[기록]** → `logs/debug_poses.txt` 에 쌓입니다.
+
 ## 3. 미션별 동작 (missions.py)
 
 | 미션 | 클래스 | 동작 |
@@ -72,14 +90,15 @@ QR 실제 내용: 출발 QR 은 `Left` / `Right`, 상자 QR 은 `PICK` / `PLACE`
 ## 4. 튜닝 순서 (처음 세팅할 때 이 순서대로)
 
 1. **모터 초기화 확인** `python3 run_mission.py --home` — 바퀴가 멈춰 있고 조향/팔이 기본값 자세로 가는지. 조향이 한쪽으로 치우치면 `STEER_CENTER_TRIM`.
-2. **포즈 각도 찾기** `python3 run_mission.py --calibrate`
+2. **포즈 각도 찾기** `python3 debug_tool.py` (브라우저에서 카메라를 보면서) 또는 `python3 run_mission.py --calibrate`
    키보드로 서보를 움직이며(a/d base, w/s shoulder, i/k wrist, [/] grip) 각 자세를 만들고 `p` 를 누르면
    `{CH_BASE: 95, CH_SHOULDER: 85, ...}` 형식으로 출력됩니다 → `config.ARM_POSES` 에 붙여넣기.
    찾아야 할 것: `scan_qr`, `drive`, `carry`, `pick_approach`, `pick_grab`, `place_drop`, `finish`,
    `BASE_LEFT` / `BASE_RIGHT`, `GRIP_OPEN` / `GRIP_CLOSED`. 좌우가 대칭이 아니면 `ARM_POSE_SIDE_OVERRIDE`.
 3. **포즈 확인** `python3 run_mission.py --pose pick_grab --side LEFT`
-4. **QR 인식 확인** `python3 run_mission.py --test-qr` — 출발선에서 모니터 QR 이 읽히는지. 안 읽히면 `logs/qr_last.jpg` 를 열어
-   카메라가 뭘 보는지 확인하고 `scan_qr` 포즈(팔을 앞으로 뻗어 카메라를 모니터에 가깝게)나 `CAMERA_SIZE` 조정.
+4. **QR 인식 확인** `python3 debug_tool.py` — 출발선에서 모니터 QR 이 초록 테두리로 읽히는지. 노랑이면 [분석] 과 카메라 조절,
+   화면에 QR 이 없으면 `scan_qr` 포즈(팔을 앞으로 뻗어 카메라를 모니터에 가깝게)나 `CAMERA_SIZE` 조정.
+   (터미널만 쓸 때는 `python3 run_mission.py --test-qr` → `logs/qr_last.jpg`)
 5. **초음파 보정 (가장 중요)** `python3 run_mission.py --measure-stopline`
    로봇의 초음파 센서를 빨간 정지선 위에 정확히 놓고 실행 → 출력되는 `ULTRA_OFFSET_CM` 값을 config 에 입력.
    (노트북의 어느 면에 초음파가 반사되느냐에 따라 측정값이 30 이 아닐 수 있어서 반드시 필요)
@@ -119,6 +138,6 @@ QR 실제 내용: 출발 QR 은 `Left` / `Right`, 상자 QR 은 `PICK` / `PLACE`
 | 정지선을 지나침 | `APPROACH_LEAD_CM` ↑ (로그의 밀림 값), `DRIVE_SPEED_SLOW` ↓, `ULTRA_OFFSET_CM` 재측정 |
 | 팔이 물체/상자까지 안 닿음 | `pick_approach` / `pick_grab` / `place_drop` 의 shoulder ↑(팔을 내리며 앞으로), wrist ↑(손을 들어 앞으로). `--calibrate` 의 s / i 키로 맞추고 p 로 붙여넣기 |
 | 초음파 값이 튐 (None / 150 이상) | 노트북 면 각도, `ULTRA_MAX_VALID_CM`, `ULTRA_SAMPLES` ↑ |
-| QR 이 안 읽힘 | `logs/qr_last.jpg` 확인, `scan_qr` 포즈, 조명 반사, pyzbar 설치, `CAMERA_SIZE` |
+| QR 이 안 읽힘 | `debug_tool.py` 의 힌트와 [분석], `scan_qr` 포즈, 조명 반사, pyzbar 설치, `CAMERA_CONTROLS`, `CAMERA_SIZE` |
 | 물체를 넘어뜨림 | `SERVO_STEP_DELAY_S` ↑ (천천히), `pick_approach` → `pick_grab` 사이 경로 조정 |
 | 자이로 보정 켰더니 더 휨 | `--test-gyro` 로 부호 확인 (`GYRO_YAW_SIGN`), 아니면 `USE_GYRO_HEADING_HOLD = False` |

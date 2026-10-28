@@ -358,6 +358,9 @@ class Camera:
             transform=libcamera.Transform(hflip=C.CAMERA_HFLIP, vflip=C.CAMERA_VFLIP))
         cam.configure(cfg)
         cam.start()
+        if C.CAMERA_CONTROLS:
+            cam.set_controls(dict(C.CAMERA_CONTROLS))
+            log.info("camera controls: %s", C.CAMERA_CONTROLS)
         self._picam = cam
         self.kind = "picamera2"
 

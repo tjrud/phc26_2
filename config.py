@@ -65,6 +65,8 @@ CAMERA_HFLIP = 0
 CAMERA_VFLIP = 0
 USB_CAMERA_INDEX = 0
 CAMERA_WARMUP_S = 0.8
+CAMERA_CONTROLS = {}        # picamera2 컨트롤. debug_tool.py 의 "카메라 조절"에서 QR 이 잘 읽히는 값을 찾아 넣으세요
+                            # 예) {"ExposureValue": -1.0, "Contrast": 1.5, "Sharpness": 2.0}
 
 # =====================================================================
 # 4. 주행 / 정밀 정지  (MISSION 2)
