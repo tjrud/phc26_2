@@ -3,23 +3,18 @@
 """
 run_mission.py - 미션 실행 / 디버그 진입점
 ==========================================
-실제 로봇 (Adeept_PiCar-Pro/Server/mission/ 안에서):
+어떤 옵션으로 실행하든 가장 먼저 모터 초기화를 합니다: 바퀴 정지 → 조향/팔 서보를 기본값(RPIservo init_pwm)으로.
+
   sudo systemctl stop Adeept_Robot.service      # 웹서버가 카메라/GPIO 를 잡고 있으므로 먼저 정지
   python3 run_mission.py                        # MISSION 1~5 전체
   python3 run_mission.py --only 2               # MISSION 2 만 (정밀 정지 튜닝)
   python3 run_mission.py --from 3 --direction LEFT   # 정지선에 세워 놓고 3,4,5 만 (QR/주행 생략)
   python3 run_mission.py --only 3 --direction RIGHT --pause-steps   # 팔 동작을 한 단계씩 Enter 로 진행
 
-하드웨어 없이 흐름만 확인 (PC/노트북):
-  python3 run_mission.py --sim                  # 가짜 하드웨어로 1~5 전체
-  python3 run_mission.py --sim --sim-direction RIGHT --only 3
-  (파이에서 --sim 을 돌리면 먼저 실제 서보를 RPIservo.py 의 init_pwm 초기값으로 되돌린 뒤 시뮬레이션합니다.
-   config.SIM_RESET_REAL_SERVOS=False 또는 --no-init 으로 끌 수 있음)
-
 점검 도구:
   --calibrate      키보드로 서보를 움직이며 포즈 각도 찾기 (p 로 config 에 붙여넣을 값 출력)
   --pose NAME      ARM_POSES 의 포즈로 이동해서 확인      (--side LEFT|RIGHT)
-  --home           모든 서보 홈(90도)
+  --home           모터 초기화(바퀴 정지 + 서보 기본값)만 하고 종료
   --test-ultra     초음파 거리 연속 출력
   --test-qr        카메라 QR 연속 인식 (logs/qr_last.jpg 저장)
   --test-gyro      자이로 yaw 출력 (축/부호 확인)
@@ -38,7 +33,7 @@ import traceback
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import config as C                                   # noqa: E402
-from hardware import make_robot, reset_real_servos, HardwareError       # noqa: E402
+from hardware import Robot, HardwareError            # noqa: E402
 from missions import MissionContext, MissionRunner, ALL_MISSIONS   # noqa: E402
 
 log = logging.getLogger("run")
@@ -79,7 +74,7 @@ def service_active(name: str) -> bool:
 
 
 def check_service(args) -> bool:
-    if args.sim or args.no_service_check:
+    if args.no_service_check:
         return True
     if not service_active(C.ROBOT_SERVICE_NAME):
         return True
@@ -123,7 +118,7 @@ CALIB_HELP = """
 │  a / d : base 왼쪽 / 오른쪽 (ch1)      w / s : shoulder 올림 / 내림 (ch2)
 │  i / k : wrist 올림 / 내림 (ch3)       [ / ] : grip 닫힘(-) / 열림(+) (ch4)
 │  o / c : grip 을 GRIP_OPEN / GRIP_CLOSED 로     , / . : 조향 좌 / 우 (ch0)
-│  + / - : 스텝 크기 변경 (1,2,5,10)      h : 홈(90)    g : config 의 포즈로 이동 (이름 입력)
+│  + / - : 스텝 크기 변경 (1,2,5,10)      h : 기본값    g : config 의 포즈로 이동 (이름 입력)
 │  p : 현재 각도를 config 에 붙여넣을 형식으로 출력   u : 초음파 거리   r : QR 한 번 읽기
 │  x : 종료
 └──────────────────────────────────────────────────────────────────────
@@ -132,8 +127,6 @@ CALIB_HELP = """
 
 def tool_calibrate(robot):
     arm, servos = robot.arm, robot.servos
-    arm.init_home()
-    robot.steer.center()
     steps = [1, 2, 5, 10]
     si = 2
     keymap = {
@@ -167,8 +160,7 @@ def tool_calibrate(robot):
             arm.grip_close()
             _print_pose(robot)
         elif ch == "h":
-            arm.init_home()
-            robot.steer.center()
+            robot.init_motors()
             _print_pose(robot)
         elif ch == "g":
             name = input("\n포즈 이름 (%s): " % ", ".join(C.ARM_POSES)).strip()
@@ -213,7 +205,6 @@ def tool_pose(robot, name, side):
     except KeyError as e:
         print(e.args[0])
         return
-    robot.arm.init_home()
     robot.arm.pose(name, side=side)
     print("포즈 '%s'%s 이동 완료: %s" % (name, " (%s)" % side if side else "", robot.arm.current_pose()))
     input("확인 후 Enter (서보는 그대로 유지) ")
@@ -230,7 +221,6 @@ def tool_test_ultra(robot):
 
 def tool_test_qr(robot, no_arm):
     if not no_arm:
-        robot.arm.init_home()
         robot.arm.pose("scan_qr")
     path = os.path.join(C.LOG_DIR, "qr_last.jpg")
     print("QR 연속 인식 (Ctrl+C 종료). 프레임은 %s 에 저장" % path)
@@ -317,20 +307,12 @@ def parse_args(argv=None):
     sel.add_argument("--direction", choices=["LEFT", "RIGHT"], help="QR 대신 방향을 미리 지정 (MISSION 1 생략)")
     sel.add_argument("--continue-on-error", action="store_true", help="미션이 실패해도 다음 미션 계속")
     sel.add_argument("--pause-steps", action="store_true", help="팔 동작(3,4)을 한 단계씩 Enter 로 진행")
-    sel.add_argument("--no-init", action="store_true",
-                     help="시작 시 서보 홈 이동 생략 (팔이 이미 홈에 있다고 가정). --sim 의 실제 서보 리셋도 생략")
-
-    sim = p.add_argument_group("시뮬레이션")
-    sim.add_argument("--sim", action="store_true", help="하드웨어 없이 가짜 로봇으로 실행")
-    sim.add_argument("--sim-direction", choices=["LEFT", "RIGHT"], default="LEFT", help="시뮬레이션 QR 방향")
-    sim.add_argument("--sim-speedup", type=float, default=None, help="시뮬레이션 배속 (기본 config.SIM_SPEEDUP)")
 
     tool = p.add_argument_group("점검 도구")
     tool.add_argument("--calibrate", action="store_true")
     tool.add_argument("--pose", metavar="NAME")
     tool.add_argument("--side", choices=["LEFT", "RIGHT"])
-    tool.add_argument("--home", action="store_true")
-    tool.add_argument("--stop", action="store_true", help="모터 정지만 하고 종료")
+    tool.add_argument("--home", action="store_true", help="모터 초기화(바퀴 정지 + 서보 기본값)만 하고 종료")
     tool.add_argument("--test-ultra", action="store_true")
     tool.add_argument("--test-qr", action="store_true")
     tool.add_argument("--no-arm", action="store_true", help="--test-qr 에서 팔을 움직이지 않음")
@@ -367,21 +349,15 @@ def main(argv=None) -> int:
     if not check_service(args):
         return 2
 
-    robot = make_robot(sim=args.sim, sim_direction=args.sim_direction, sim_speedup=args.sim_speedup)
+    robot = Robot()
     code = 0
     try:
-        # --sim: 먼저 실제 서보를 파이카 기본 초기값(RPIservo init_pwm)으로 되돌림 (하드웨어 없으면 자동 건너뜀)
-        if args.sim and C.SIM_RESET_REAL_SERVOS and not args.no_init:
-            reset_real_servos()
+        # 가장 먼저 모터 초기화: 바퀴 정지 → 조향/팔 서보를 기본값(RPIservo init_pwm)으로
+        robot.init_motors()
 
         # ---- 점검 도구 ----
-        if args.stop:
-            robot.drive.stop()
-            print("모터 정지")
-        elif args.home:
-            robot.arm.init_home()
-            robot.steer.center()
-            print("홈 이동 완료: %s  steer=%.0f" % (robot.arm.current_pose(), robot.steer.center_angle))
+        if args.home:
+            print("모터 초기화 완료: %s  steer=%.0f" % (robot.arm.current_pose(), robot.servos.get(C.CH_STEER)))
         elif args.calibrate:
             tool_calibrate(robot)
         elif args.pose:
@@ -402,13 +378,6 @@ def main(argv=None) -> int:
         else:
             nums = select_missions(args)
             ctx = MissionContext(direction=args.direction, pause_steps=args.pause_steps)
-            if args.no_init:
-                for ch, a in robot.home_pose().items():
-                    robot.servos.angles[ch] = a
-                robot.servos.angles[C.CH_STEER] = robot.steer.center_angle
-            else:
-                robot.arm.init_home()
-            robot.steer.center()
             ok = MissionRunner(robot, ctx, nums, continue_on_error=args.continue_on_error).run()
             code = 0 if ok else 1
     except KeyboardInterrupt:

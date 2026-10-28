@@ -150,7 +150,7 @@ class Mission1QRStart(Mission):
         debug_path = os.path.join(C.LOG_DIR, "qr_last.jpg")
         while True:
             now = robot.now()
-            save = (not robot.is_sim) and C.QR_SAVE_DEBUG_FRAME_S > 0 and now >= next_save
+            save = C.QR_SAVE_DEBUG_FRAME_S > 0 and now >= next_save
             texts = robot.read_qr(save_path=debug_path if save else None)
             if save:
                 next_save = now + C.QR_SAVE_DEBUG_FRAME_S
@@ -210,7 +210,8 @@ class Mission2DriveAndStop(Mission):
 
 
 class PrecisionStopper:
-    """FAST → SLOW → 정지 → 펄스 전진(creep) → 판정.  MISSION 2 의 핵심 로직 (단독 테스트: --only 2)"""
+    """APPROACH_CM 까지 펄스 없이 연속 주행(FAST → SLOW) → 정지 → 펄스로 앞/뒤 재배치(creep) → 판정.
+    MISSION 2 의 핵심 로직 (단독 테스트: --only 2)"""
 
     def __init__(self, robot: Robot, log: logging.Logger):
         self.robot = robot
@@ -225,24 +226,38 @@ class PrecisionStopper:
             self.gyro = robot.gyro
             if self.gyro:
                 self.gyro.calibrate()
-        pulses = 0
+        stop_at = C.APPROACH_CM + C.APPROACH_LEAD_CM      # 밀리는 거리만큼 일찍 정지 명령
         try:
-            self._drive_until(self.target + C.FAST_ZONE_CM, C.DRIVE_SPEED_FAST, "FAST")
-            self._drive_until(self.target + C.SLOW_ZONE_CM, C.DRIVE_SPEED_SLOW, "SLOW")
+            d_fast = self._drive_until(stop_at + C.SLOW_ZONE_CM, C.DRIVE_SPEED_FAST, "FAST")
+            d_slow = self._drive_until(stop_at, C.DRIVE_SPEED_SLOW, "SLOW")
         finally:
             robot.drive.stop()
             robot.steer.center()
         robot.sleep(C.STOP_SETTLE_S)
-        d, pulses = self._creep()
-        return self.classify(d, pulses)
+        d = robot.ultra.read()
+        approach = self._report_approach(d_slow if d_slow is not None else d_fast, d)
+        d, pulses = self._creep(d)
+        out = self.classify(d, pulses)
+        out.update(approach)
+        return out
+
+    def _report_approach(self, d_cmd: Optional[float], d: Optional[float]) -> Dict:
+        """연속 주행 결과. 밀림 = 정지 명령 때 거리 - 멈춘 뒤 거리 → APPROACH_LEAD_CM 권장값"""
+        if d_cmd is None or d is None:
+            return {}
+        slide = d_cmd - d
+        self.log.info("[APPROACH] 정지 명령 %.1fcm → 멈춘 뒤 %.1fcm (밀림 %.1fcm). %.0fcm 에 맞추려면 APPROACH_LEAD_CM = %.1f",
+                      d_cmd, d, slide, C.APPROACH_CM, max(slide, 0.0))
+        return {"approach_cm": round(d, 1), "slide_cm": round(slide, 1)}
 
     # ---- 연속 주행 ----
-    def _drive_until(self, threshold: float, speed: int, label: str):
+    def _drive_until(self, threshold: float, speed: int, label: str) -> Optional[float]:
+        """threshold 를 읽을 때까지 speed 로 연속 주행 (정지는 호출한 쪽에서). 도달한 거리, 이미 안쪽이면 None"""
         robot = self.robot
         d = robot.ultra.read_raw()
         if d is not None and d <= threshold:
             self.log.info("[%s] 생략 (%.1fcm ≤ %.1f)", label, d, threshold)
-            return
+            return None
         self.log.info("[%s] 속도 %d, %.1fcm 까지 주행", label, speed, threshold)
         if self.gyro:
             self.gyro.reset()
@@ -260,7 +275,7 @@ class PrecisionStopper:
                 invalid = 0
                 if d <= threshold:
                     self.log.info("[%s] 도달 %.1fcm (%.1fs)", label, d, robot.now() - t0)
-                    return
+                    return d
             if self.gyro:
                 yaw = self.gyro.update()
                 steer = max(-C.GYRO_MAX_STEER, min(C.GYRO_MAX_STEER, -C.GYRO_KP * yaw))
@@ -278,16 +293,16 @@ class PrecisionStopper:
         self.robot.drive.stop()
         raise MissionError(msg)
 
-    # ---- 펄스 전진 ----
-    def _creep(self):
-        """펄스 → 대기 → 측정 반복.
+    # ---- 펄스 재배치 ----
+    def _creep(self, d_first: Optional[float] = None):
+        """측정 → 펄스(앞/뒤) → 대기 반복. d_first 가 있으면 첫 측정으로 사용.
         - 목표를 지나쳐 방향이 바뀌면 펄스를 줄여(CREEP_SHRINK) 진동 없이 수렴
         - 2회 연속 거의 안 움직이면 펄스를 늘림 (모터 데드존 대응)"""
         robot = self.robot
         pulse_s = C.CREEP_PULSE_S
         prev, prev_sign, stall = None, None, 0
         for i in range(1, C.MAX_CREEP_PULSES + 1):
-            d = robot.ultra.read()
+            d = d_first if i == 1 and d_first is not None else robot.ultra.read()
             if d is None:
                 self.log.warning("[CREEP] 측정 실패, 재시도")
                 robot.sleep(C.CREEP_SETTLE_S)
@@ -482,11 +497,6 @@ class Mission5Finish(Mission):
         total = time.time() - ctx.t_start
         res.info["total_s"] = round(total, 1)
         self.log.info("모든 로봇 동작 완료. 총 %.1fs ▶ 조교 확인 후 종료 버튼을 누르세요.", total)
-        if robot.is_sim:
-            judge = robot.world.judge()
-            res.info["sim_judge"] = judge
-            res.info["sim_events"] = robot.world.events
-            self.log.info("SIM 판정: %s / 이벤트: %s", judge, robot.world.events)
 
 
 # =====================================================================
@@ -506,8 +516,7 @@ class MissionRunner:
     def run(self) -> bool:
         by_num = {m.number: m for m in ALL_MISSIONS}
         all_ok = True
-        self.log.info("실행할 미션: %s  (방향=%s, %s)", self.numbers, self.ctx.direction or "QR로 결정",
-                      "SIM" if self.robot.is_sim else "REAL")
+        self.log.info("실행할 미션: %s  (방향=%s)", self.numbers, self.ctx.direction or "QR로 결정")
         try:
             for n in self.numbers:
                 res = by_num[n](self.robot, self.ctx).run()
@@ -536,7 +545,7 @@ class MissionRunner:
         try:
             os.makedirs(C.LOG_DIR, exist_ok=True)
             path = os.path.join(C.LOG_DIR, "result_%s.json" % time.strftime("%Y%m%d_%H%M%S"))
-            data = {"direction": self.ctx.direction, "sim": self.robot.is_sim,
+            data = {"direction": self.ctx.direction,
                     "missions": [r.to_dict() for _, r in sorted(self.ctx.results.items())]}
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2, default=str)

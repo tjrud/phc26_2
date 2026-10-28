@@ -74,15 +74,18 @@ STOP_TOLERANCE_CM = 0.5     # |측정 - 목표| 가 이 값 이하면 정지 완
 RED_HALF_WIDTH_CM = 1.0     # 빨간선 반폭 (폭 2cm)  → 29~31cm = 만점
 YELLOW_HALF_WIDTH_CM = 3.0  # 노란선 바깥 경계      → 27~33cm = 감점, 27 미만 = 실격(넘어감)
 
+# 접근: APPROACH_CM 까지는 펄스 없이 연속 주행으로 빠르게 → 정지 → 펄스(creep)로 앞/뒤 움직여 STOP_TARGET_CM 에 맞춤
+APPROACH_CM = 31.0          # 연속 주행으로 다가갈 거리
+APPROACH_LEAD_CM = 4.5      # 정지 명령 뒤 더 밀리는 거리 (초음파 지연 + 관성). APPROACH_CM + 이 값을 읽으면 모터 정지.
+                            # 로그의 "[APPROACH] ... 밀림 x.xcm" 값을 넣으면 APPROACH_CM 에 맞춰 섭니다 (더 들어가면 키우세요)
 DRIVE_SPEED_FAST = 40       # 0~100
-DRIVE_SPEED_SLOW = 25
-FAST_ZONE_CM = 20.0         # 목표 + 20cm 까지는 FAST
-SLOW_ZONE_CM = 8.0          # 목표 + 8cm  까지는 SLOW, 그 뒤 정지 후 펄스 전진(creep)
+DRIVE_SPEED_SLOW = 25       # 정지 직전 SLOW_ZONE_CM 구간 속도 (연속 주행. 느릴수록 밀림이 작고 일정)
+SLOW_ZONE_CM = 10.0         # 정지 명령 지점(APPROACH_CM + APPROACH_LEAD_CM) 10cm 앞부터 SLOW. 0 = 끝까지 FAST (밀림↑)
 DRIVE_LOOP_S = 0.03         # 주행 루프 주기
 DRIVE_TIMEOUT_S = 20.0      # 각 주행 단계 최대 시간 (초과 시 비상 정지)
 STOP_SETTLE_S = 0.6         # 정지 후 센서값 안정 대기
 
-# 펄스 전진(creep): 아주 짧게 전진 → 정지 → 측정 반복
+# 펄스(creep): 아주 짧게 전진/후진 → 정지 → 측정 반복
 CREEP_SPEED = 30            # 모터가 실제로 움직이기 시작하는 최소값보다 커야 함
 CREEP_PULSE_S = 0.08        # 펄스 길이 (한 번에 약 0.5~1cm 움직이도록 --test-pulse 로 조절)
 CREEP_PULSE_MIN_S = 0.04    # 목표를 지나쳐 방향이 바뀔 때마다 펄스를 줄임 (하한)
@@ -127,10 +130,10 @@ GYRO_BIAS_SAMPLES = 100     # 정지 상태 바이어스 측정 샘플 수 (약 
 CH_STEER, CH_BASE, CH_SHOULDER, CH_WRIST, CH_GRIP = 0, 1, 2, 3, 4
 CH_NAMES = {CH_STEER: "steer", CH_BASE: "base", CH_SHOULDER: "shoulder", CH_WRIST: "wrist", CH_GRIP: "grip"}
 
-# ---- 서보 초기 상태 = 파이카 기본값 (Server/RPIservo.py 의 init_pwm0~7, 웹서버가 켜질 때 서보가 가는 위치) ----
-USE_ADEEPT_INIT_AS_HOME = True   # True: 홈 포즈와 조향 중립을 RPIservo.py 의 init_pwm 값으로 (못 읽으면 ARM_POSES["home"] / 90)
-SIM_RESET_REAL_SERVOS = True     # True: --sim 실행 시 먼저 실제 서보를 그 초기값으로 되돌린 뒤 시뮬레이션 (하드웨어 없으면 건너뜀)
-RESET_CHANNELS = [CH_STEER, CH_BASE, CH_SHOULDER, CH_WRIST, CH_GRIP]   # 리셋할 채널
+# ---- 서보 기본값 = 파이카 기본값 (Server/RPIservo.py 의 init_pwm0~7, 웹서버가 켜질 때 서보가 가는 위치) ----
+# run_mission.py 는 실행하자마자 모터 초기화(바퀴 정지 → 조향/팔 서보를 이 기본값으로 즉시 이동)부터 합니다.
+# 홈 포즈(--home, --calibrate 의 h)와 조향 중립도 같은 값.
+USE_ADEEPT_INIT_AS_HOME = True   # True: RPIservo.py 의 init_pwm 값 사용 (못 읽으면 ARM_POSES["home"] / 조향 90)
 
 SERVO_FAST_DRIVER = True    # True: PCA9685 객체를 한 번만 만들어 재사용 (부드럽고 빠름). 문제 있으면 False
 SERVO_LIMITS = {            # 기구 보호용 각도 제한 (절대각). 캘리브레이션 후 실제 가동범위로 줄이세요
@@ -165,12 +168,14 @@ ARM_POSES = {
     "drive":         {CH_BASE: 90, CH_SHOULDER: 60, CH_WRIST: 110, CH_GRIP: 90},
     # 물체를 든 채로 이동하는 높이 (base 회전 전후)
     "carry":         {CH_SHOULDER: 60, CH_WRIST: 100},
+    # ↓ 집기/놓기는 팔을 멀리 뻗는 자세: shoulder ↑ = 팔을 내리며 앞으로, wrist ↑ = 손을 들어 앞으로.
+    #   상자까지 모자라면 둘 다 더 키우고, 상자에 부딪히면 shoulder 를 줄이세요.
     # 상자 위 모서리에 세워진 물체 바로 앞 (집게 벌린 상태)
-    "pick_approach": {CH_SHOULDER: 105, CH_WRIST: 90},
+    "pick_approach": {CH_SHOULDER: 125, CH_WRIST: 110},
     # 집는 위치
-    "pick_grab":     {CH_SHOULDER: 118, CH_WRIST: 85},
+    "pick_grab":     {CH_SHOULDER: 138, CH_WRIST: 105},
     # 반대편 상자 안쪽 위 (여기서 집게를 벌려 떨어뜨림)
-    "place_drop":    {CH_SHOULDER: 110, CH_WRIST: 95},
+    "place_drop":    {CH_SHOULDER: 130, CH_WRIST: 115},
     # MISSION 5: 종료 자세
     "finish":        {CH_BASE: 90, CH_SHOULDER: 60, CH_WRIST: 110, CH_GRIP: 90},
 }
@@ -206,16 +211,6 @@ PICK_PLACE_SEQUENCE = [
 
 TUCK_ARM_BEFORE_DRIVE = True   # QR 인식 후 주행 전에 "drive" 포즈로 정리 (PDF TIP)
 FINISH_POSE = "finish"         # MISSION 5 에서 취할 포즈
-
-# =====================================================================
-# 6. 시뮬레이션 (--sim) : 하드웨어 없이 PC 에서 흐름 확인용
-# =====================================================================
-SIM_SPEEDUP = 5.0              # sleep 을 1/5 로 줄여 빨리 돌림
-SIM_START_DISTANCE_CM = 87.0   # 출발선(센서) ~ 모니터  (109 - 22)
-SIM_CM_PER_S_PER_PCT = 0.5     # 속도 40 → 20cm/s
-SIM_ULTRA_NOISE_CM = 0.3
-SIM_ULTRA_LATENCY_S = 0.3      # gpiozero 중앙값 필터의 지연 흉내
-SIM_QR_APPEARS_AFTER_S = 5.0   # 시작 버튼 후 5초 뒤 QR 표시
 
 
 # =====================================================================

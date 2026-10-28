@@ -2,8 +2,8 @@
 """
 hardware.py - 하드웨어 래퍼
 ===========================
-실제 로봇(Adeept PiCar-Pro Server 코드 재사용)과 시뮬레이션(--sim) 두 가지 백엔드를
-같은 인터페이스로 제공합니다.  missions.py 는 이 파일의 Robot 객체만 사용합니다.
+Adeept PiCar-Pro 의 Server 코드를 재사용해서 실제 로봇을 다룹니다.
+missions.py 는 이 파일의 Robot 객체만 사용합니다.
 
   Robot
    ├─ drive  : 전진/후진/정지/펄스        (Server/Move.py 재사용)
@@ -15,15 +15,13 @@ hardware.py - 하드웨어 래퍼
    ├─ camera : 프레임 캡처 (Picamera2 / USB)
    └─ qr     : QR 디코딩 (pyzbar 있으면 사용, 없으면 OpenCV)
 
-각 부품은 처음 사용할 때 초기화됩니다(lazy). 그래서 --only 3 처럼 일부 미션만 돌릴 때
-필요 없는 장치(예: 초음파)를 건드리지 않습니다.
+바퀴 모터와 서보는 실행 직후 Robot.init_motors() 에서 초기화되고, 나머지 부품은 처음 사용할 때
+초기화됩니다(lazy). 그래서 --only 3 처럼 일부 미션만 돌릴 때 필요 없는 장치(예: 초음파)를 건드리지 않습니다.
 """
-import collections
 import glob
 import logging
 import math
 import os
-import random
 import statistics
 import sys
 import time
@@ -96,33 +94,11 @@ def read_adeept_init_positions() -> Optional[Dict[int, int]]:
         return None
 
 
-def reset_real_servos(channels: Optional[List[int]] = None) -> Optional[Dict[int, int]]:
-    """실제 서보를 RPIservo.py 의 init_pwm 값으로 즉시 이동 (웹서버 시작 시 moveInit 과 동일).
-    하드웨어가 없거나 초기화에 실패하면 None 을 돌려주고 건너뜀."""
-    init = read_adeept_init_positions()
-    if init is None:
-        log.info("실제 서보 리셋 건너뜀 (Adeept Server/하드웨어 라이브러리 없음)")
-        return None
-    try:
-        backend = _make_servo_backend(C.SERVO_FAST_DRIVER)
-    except Exception as e:
-        log.warning("서보 하드웨어 초기화 실패 (%s) → 리셋 건너뜀", e)
-        return None
-    done = {}
-    for ch in (channels if channels is not None else C.RESET_CHANNELS):
-        if ch in init:
-            backend.set_angle(ch, init[ch])
-            done[ch] = init[ch]
-    log.info("실제 서보 초기화 (RPIservo init_pwm): %s", _fmt_pose(done))
-    time.sleep(0.5)
-    return done
-
-
 # =====================================================================
 # 1. 주행 (DC 모터)
 # =====================================================================
 class Drive:
-    """backend: move(speed, direction, turn) / motorStop() 을 가진 객체 (Server/Move.py 또는 시뮬레이터)"""
+    """backend: move(speed, direction, turn) / motorStop() 을 가진 객체 (Server/Move.py)"""
 
     def __init__(self, backend, sleep: Callable[[float], None] = time.sleep):
         self._b = backend
@@ -493,7 +469,6 @@ class QRReader:
 # =====================================================================
 class Robot:
     """실제 하드웨어. 부품은 처음 접근할 때 초기화됩니다."""
-    is_sim = False
 
     def __init__(self):
         self.sleep = time.sleep
@@ -532,6 +507,14 @@ class Robot:
     def steer_center(self) -> float:
         init = self.adeept_init()
         return float(init.get(C.CH_STEER, 90)) if init else 90.0
+
+    # ---- 모터 초기화 ----
+    def init_motors(self):
+        """run_mission.py 가 실행되자마자 호출: 바퀴 정지 → 조향/팔 서보를 기본값으로 즉시 이동 (Adeept moveInit 과 같은 방식)"""
+        self.drive.stop()
+        self.steer.center()
+        log.info("모터 초기화: 바퀴 정지, steer → %.0f", self.servos.get(C.CH_STEER))
+        self.arm.init_home()
 
     # ---- 부품 (lazy) ----
     @property
@@ -656,174 +639,3 @@ def _make_servo_backend(fast: bool):
             s.angle = clamp(angle, 0, 180)
 
     return FastServoCtrl()
-
-
-# =====================================================================
-# 7. 시뮬레이션 (--sim)
-# =====================================================================
-class SimWorld:
-    """아주 단순한 경기장 모델: 직선 위치, 초음파 거리, 팔 상태, 물체 위치, QR 표시"""
-
-    def __init__(self, direction: str = "LEFT", speedup: float = None):
-        self.speedup = speedup or C.SIM_SPEEDUP
-        self.direction = direction
-        self.x = 0.0                 # 출발선 기준 전진 거리 (cm)
-        self.v = 0.0                 # cm/s
-        self.target_v = 0.0
-        self.t0 = time.monotonic()
-        self._last = self.t0
-        self.servo = {}              # ch → angle
-        self.objects = {"LEFT": "rim", "RIGHT": "rim"}   # rim(상자 모서리에 세워짐) / held / inside:<side> / dropped
-        self.held = None
-        self.events: List[str] = []
-        self._dist_hist = collections.deque()
-
-    # 시간
-    def sim_time(self) -> float:
-        return (time.monotonic() - self.t0) * self.speedup
-
-    def sleep(self, s: float):
-        time.sleep(max(0.0, s) / self.speedup)
-
-    TAU = 0.12   # 속도 1차 지연 시정수 (s): 가속/감속(관성) 흉내
-
-    def advance(self):
-        now = time.monotonic()
-        dt = (now - self._last) * self.speedup
-        self._last = now
-        if dt <= 0:
-            return
-        # v(t) = target + (v0 - target) e^(-t/τ) 의 정확한 적분 → 펄스 후 미끄러지는 거리까지 반영
-        k = math.exp(-dt / self.TAU)
-        v0 = self.v
-        self.x += self.target_v * dt + (v0 - self.target_v) * self.TAU * (1.0 - k)
-        self.v = self.target_v + (v0 - self.target_v) * k
-
-    # 모터 (Move.py 와 같은 시그니처)
-    def move(self, speed, direction, turn):
-        self.advance()
-        self.target_v = speed * C.SIM_CM_PER_S_PER_PCT * (1 if direction == 1 else -1)
-
-    def motorStop(self):
-        self.advance()
-        self.target_v = 0.0
-
-    # 초음파
-    def distance(self) -> float:
-        self.advance()
-        d = C.SIM_START_DISTANCE_CM - self.x + random.gauss(0, C.SIM_ULTRA_NOISE_CM)
-        t = self.sim_time()
-        self._dist_hist.append((t, d))
-        while self._dist_hist and self._dist_hist[0][0] < t - C.SIM_ULTRA_LATENCY_S - 0.05:
-            self._dist_hist.popleft()
-        # 지연된 값 반환
-        for ts, dv in self._dist_hist:
-            if ts >= t - C.SIM_ULTRA_LATENCY_S:
-                return dv
-        return d
-
-    # 서보
-    def set_angle(self, ch, angle):
-        prev = self.servo.get(ch)
-        self.servo[ch] = angle
-        if ch == C.CH_GRIP and prev is not None:
-            self._grip_event(prev, angle)
-
-    def _side_facing(self) -> Optional[str]:
-        b = self.servo.get(C.CH_BASE, 90)
-        if abs(b - C.BASE_LEFT) <= 15:
-            return "LEFT"
-        if abs(b - C.BASE_RIGHT) <= 15:
-            return "RIGHT"
-        return None
-
-    def _near_pose(self, name, side=None, tol=6) -> bool:
-        p = C.get_pose(name, side)
-        return all(abs(self.servo.get(ch, 90) - a) <= tol for ch, a in p.items() if ch != C.CH_GRIP)
-
-    def _grip_event(self, prev, angle):
-        closing = angle < prev and abs(angle - C.GRIP_CLOSED) <= 5
-        opening = angle > prev and abs(angle - C.GRIP_OPEN) <= 5
-        side = self._side_facing()
-        if closing and self.held is None and side and self.objects[side] == "rim" and self._near_pose("pick_grab", side):
-            self.held = side
-            self.objects[side] = "held"
-            self.events.append("GRAB %s object" % side)
-        elif opening and self.held is not None:
-            if side and self._near_pose("place_drop", side):
-                self.objects[self.held] = "inside:%s" % side
-                self.events.append("DROP %s object into %s box" % (self.held, side))
-            else:
-                self.objects[self.held] = "dropped"
-                self.events.append("DROPPED %s object on the floor!" % self.held)
-            self.held = None
-
-    # QR
-    def qr_texts(self) -> List[str]:
-        side = self._side_facing()
-        if side:   # 실제 상자엔 PICK(물체 뒤) / PLACE(빈 안쪽) 카드가 둘 다 있음
-            return ["PICK", "PLACE"] if self.objects[side] == "rim" else ["PLACE", "PICK"]
-        if self.sim_time() >= C.SIM_QR_APPEARS_AFTER_S and self._near_pose("scan_qr"):
-            return ["Left" if self.direction == "LEFT" else "Right"]   # 실제 QR 과 같은 대소문자
-        return []
-
-    def judge(self) -> Dict[str, str]:
-        """최종 상태: 각 물체가 반대편 상자 안에 있어야 성공"""
-        return {s: self.objects[s] for s in ("LEFT", "RIGHT")}
-
-
-class SimRobot(Robot):
-    is_sim = True
-
-    def __init__(self, direction: str = "LEFT", speedup: float = None):
-        super().__init__()
-        self.world = SimWorld(direction, speedup)
-        self.sleep = self.world.sleep
-        self.now = self.world.sim_time
-
-    @property
-    def drive(self) -> Drive:
-        if self._drive is None:
-            self._drive = Drive(self.world, self.sleep)
-            log.info("drive: SIM")
-        return self._drive
-
-    @property
-    def servos(self) -> Servos:
-        if self._servos is None:
-            self._servos = Servos(self.world, self.sleep)
-            log.info("servos: SIM")
-        return self._servos
-
-    @property
-    def ultra(self) -> Ultrasonic:
-        if self._ultra is None:
-            self._ultra = Ultrasonic(self.world.distance, self.sleep)
-            log.info("ultra: SIM")
-        return self._ultra
-
-    @property
-    def gyro(self) -> Optional[Gyro]:
-        if self._gyro is None:
-            self._gyro = Gyro(lambda: random.gauss(0.0, 0.2), self.sleep, self.now)
-            log.info("gyro: SIM")
-        return self._gyro
-
-    @property
-    def camera(self):
-        raise HardwareError("SIM 에는 카메라가 없습니다 (read_qr 만 사용)")
-
-    @property
-    def qr(self):
-        raise HardwareError("SIM 에는 QRReader 가 없습니다 (read_qr 만 사용)")
-
-    def read_qr(self, save_path: Optional[str] = None) -> List[str]:
-        self.sleep(0.03)
-        return [t.strip().upper() for t in self.world.qr_texts()]
-
-    def shutdown(self):
-        self.stop_all()
-
-
-def make_robot(sim: bool = False, sim_direction: str = "LEFT", sim_speedup: float = None) -> Robot:
-    return SimRobot(sim_direction, sim_speedup) if sim else Robot()
