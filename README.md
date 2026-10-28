@@ -49,10 +49,15 @@ python3 run_mission.py --only 1                # QR 인식만
 python3 run_mission.py --from 3 --direction LEFT          # 정지선에 세워 두고 3,4,5 만 (QR/주행 생략)
 python3 run_mission.py --only 3 --direction RIGHT --pause-steps   # 팔 동작을 Enter 로 한 단계씩
 python3 run_mission.py --continue-on-error     # 한 미션이 실패해도 끝까지
-python3 run_mission.py --sim                   # PC 에서 가짜 하드웨어로 흐름 확인 (--sim-direction RIGHT)
+python3 run_mission.py --sim                   # 가짜 하드웨어로 흐름 확인 (--sim-direction RIGHT)
 ```
 
 실행하면 `logs/run_날짜.log` 에 전체 로그, `logs/result_날짜.json` 에 미션별 결과(정지 거리, 방향, 소요 시간)가 남습니다.
+
+**서보 초기 상태 = 파이카 기본값.** 홈 포즈와 조향 중립은 `Server/RPIservo.py` 의 `init_pwm0~7`(웹서버가 켜질 때 서보가 가는 위치)을
+그대로 씁니다. 파이에서 `--sim` 을 돌리면 먼저 실제 서보를 그 값으로 되돌린 뒤 시뮬레이션을 시작하므로, 로봇을 초기 상태로
+맞추는 용도로도 쓸 수 있습니다(`--home` 도 같은 위치). PC 처럼 하드웨어가 없으면 리셋은 자동으로 건너뜁니다.
+끄려면 `config.py` 의 `SIM_RESET_REAL_SERVOS = False`, 초기값을 config 의 `ARM_POSES["home"]`/90 으로 쓰려면 `USE_ADEEPT_INIT_AS_HOME = False`.
 
 ## 3. 미션별 동작 (missions.py)
 

@@ -127,6 +127,11 @@ GYRO_BIAS_SAMPLES = 100     # 정지 상태 바이어스 측정 샘플 수 (약 
 CH_STEER, CH_BASE, CH_SHOULDER, CH_WRIST, CH_GRIP = 0, 1, 2, 3, 4
 CH_NAMES = {CH_STEER: "steer", CH_BASE: "base", CH_SHOULDER: "shoulder", CH_WRIST: "wrist", CH_GRIP: "grip"}
 
+# ---- 서보 초기 상태 = 파이카 기본값 (Server/RPIservo.py 의 init_pwm0~7, 웹서버가 켜질 때 서보가 가는 위치) ----
+USE_ADEEPT_INIT_AS_HOME = True   # True: 홈 포즈와 조향 중립을 RPIservo.py 의 init_pwm 값으로 (못 읽으면 ARM_POSES["home"] / 90)
+SIM_RESET_REAL_SERVOS = True     # True: --sim 실행 시 먼저 실제 서보를 그 초기값으로 되돌린 뒤 시뮬레이션 (하드웨어 없으면 건너뜀)
+RESET_CHANNELS = [CH_STEER, CH_BASE, CH_SHOULDER, CH_WRIST, CH_GRIP]   # 리셋할 채널
+
 SERVO_FAST_DRIVER = True    # True: PCA9685 객체를 한 번만 만들어 재사용 (부드럽고 빠름). 문제 있으면 False
 SERVO_LIMITS = {            # 기구 보호용 각도 제한 (절대각). 캘리브레이션 후 실제 가동범위로 줄이세요
     CH_STEER: (50, 130),
@@ -152,7 +157,7 @@ BASE_RIGHT = 10             # 오른쪽 상자를 향하는 각도
 
 # ---- 포즈 (절대각). 아래 값은 전부 "자리표시자" 입니다. 반드시 --calibrate 로 실제 값을 찾아 넣으세요 ----
 ARM_POSES = {
-    # 모든 서보 기본 위치 (Adeept 초기값과 같음)
+    # 홈 포즈. USE_ADEEPT_INIT_AS_HOME=True 면 RPIservo.py 의 init_pwm 값이 대신 쓰이고, 이 값은 못 읽을 때의 대체값
     "home":          {CH_BASE: 90, CH_SHOULDER: 90, CH_WRIST: 90, CH_GRIP: 90},
     # MISSION 1: 출발선에서 카메라가 모니터 QR 을 보는 자세 (필요하면 팔을 앞으로 뻗어 카메라를 모니터에 가깝게)
     "scan_qr":       {CH_BASE: 90, CH_SHOULDER: 75, CH_WRIST: 90, CH_GRIP: 90},

@@ -81,6 +81,44 @@ def clamp(v, lo, hi):
 
 
 # =====================================================================
+# 파이카 기본 서보 초기값 (Server/RPIservo.py 의 init_pwm0~7)
+# =====================================================================
+def read_adeept_init_positions() -> Optional[Dict[int, int]]:
+    """RPIservo.py 의 init_pwm 값 {채널: 각도}. Adeept 웹서버가 켜질 때 서보가 가는 위치와 같음.
+    Server 폴더나 Adeept 라이브러리가 없으면(PC 등) None."""
+    try:
+        add_server_path()
+        import RPIservo
+        sc = RPIservo.ServoCtrl()            # 스레드는 시작하지 않음, initPos 만 읽음
+        return {ch: int(a) for ch, a in enumerate(sc.initPos)}
+    except Exception as e:
+        log.debug("RPIservo init_pwm 읽기 실패: %s", e)
+        return None
+
+
+def reset_real_servos(channels: Optional[List[int]] = None) -> Optional[Dict[int, int]]:
+    """실제 서보를 RPIservo.py 의 init_pwm 값으로 즉시 이동 (웹서버 시작 시 moveInit 과 동일).
+    하드웨어가 없거나 초기화에 실패하면 None 을 돌려주고 건너뜀."""
+    init = read_adeept_init_positions()
+    if init is None:
+        log.info("실제 서보 리셋 건너뜀 (Adeept Server/하드웨어 라이브러리 없음)")
+        return None
+    try:
+        backend = _make_servo_backend(C.SERVO_FAST_DRIVER)
+    except Exception as e:
+        log.warning("서보 하드웨어 초기화 실패 (%s) → 리셋 건너뜀", e)
+        return None
+    done = {}
+    for ch in (channels if channels is not None else C.RESET_CHANNELS):
+        if ch in init:
+            backend.set_angle(ch, init[ch])
+            done[ch] = init[ch]
+    log.info("실제 서보 초기화 (RPIservo init_pwm): %s", _fmt_pose(done))
+    time.sleep(0.5)
+    return done
+
+
+# =====================================================================
 # 1. 주행 (DC 모터)
 # =====================================================================
 class Drive:
@@ -167,14 +205,15 @@ class Servos:
 
 
 class Steering:
-    def __init__(self, servos: Servos):
+    def __init__(self, servos: Servos, center: float = 90.0):
         self._s = servos
+        self.center_angle = float(center)        # 직진 서보각 (RPIservo init_pwm0 또는 90)
         self.current_deg = 0.0
 
     def set(self, deg: float):
         """deg > 0 우회전, deg < 0 좌회전 (STEER_RIGHT_SIGN 으로 반전 가능)"""
         deg = clamp(deg, -C.STEER_MAX_DEG, C.STEER_MAX_DEG)
-        self._s.write(C.CH_STEER, 90 + C.STEER_CENTER_TRIM + C.STEER_RIGHT_SIGN * deg)
+        self._s.write(C.CH_STEER, self.center_angle + C.STEER_CENTER_TRIM + C.STEER_RIGHT_SIGN * deg)
         self.current_deg = deg
 
     def center(self):
@@ -184,19 +223,22 @@ class Steering:
 class Arm:
     """로봇팔 (ch1 base, ch2 shoulder, ch3 wrist, ch4 grip)"""
 
-    def __init__(self, servos: Servos, sleep: Callable[[float], None] = time.sleep):
+    def __init__(self, servos: Servos, sleep: Callable[[float], None] = time.sleep,
+                 home_pose: Optional[Dict[int, float]] = None):
         self.servos = servos
         self._sleep = sleep
+        self.home_pose = dict(home_pose) if home_pose else C.get_pose("home")
 
     def init_home(self):
         """시작 시 홈 포즈로 '즉시' 이동 (Adeept moveInit 과 동일한 방식, 보간 없음)"""
-        for ch, a in C.get_pose("home").items():
+        log.info("arm home → %s", _fmt_pose(self.home_pose))
+        for ch, a in self.home_pose.items():
             self.servos.write(ch, a)
         self._sleep(0.5)
 
     def pose(self, name: str, side: Optional[str] = None, settle: float = None, speed: float = 1.0):
-        """ARM_POSES 의 포즈로 보간 이동. speed>1 이면 빠르게, <1 이면 느리게"""
-        targets = C.get_pose(name, side)
+        """ARM_POSES 의 포즈로 보간 이동. speed>1 이면 빠르게, <1 이면 느리게. 'home' 은 RPIservo 초기값 기준"""
+        targets = self.home_pose if name == "home" else C.get_pose(name, side)
         log.info("arm pose '%s'%s → %s", name, " (%s)" % side if side else "", _fmt_pose(targets))
         self.servos.move_to(targets, step_delay=C.SERVO_STEP_DELAY_S / max(speed, 1e-3))
         self._sleep(C.SERVO_SETTLE_S if settle is None else settle)
@@ -459,12 +501,37 @@ class Robot:
         self._drive = self._servos = self._steer = self._arm = None
         self._ultra = self._gyro = self._camera = self._qr = None
         self._server_dir = None
+        self._adeept_init = None
 
     # ---- 내부 ----
     def _server(self):
         if self._server_dir is None:
             self._server_dir = add_server_path()
         return self._server_dir
+
+    # ---- 파이카 기본 초기값 ----
+    def adeept_init(self) -> Optional[Dict[int, int]]:
+        """RPIservo.py 의 init_pwm 값 (한 번만 읽음). 없으면 None"""
+        if self._adeept_init is None:
+            init = read_adeept_init_positions() if C.USE_ADEEPT_INIT_AS_HOME else None
+            self._adeept_init = init if init else False
+            if init:
+                log.info("서보 초기값: RPIservo.py init_pwm %s", _fmt_pose({ch: init[ch] for ch in range(5) if ch in init}))
+            elif C.USE_ADEEPT_INIT_AS_HOME:
+                log.info("서보 초기값: RPIservo.py 를 못 읽어 config ARM_POSES['home'] / 90 사용")
+        return self._adeept_init or None
+
+    def home_pose(self) -> Dict[int, float]:
+        """홈 포즈 (팔 채널). RPIservo init_pwm 이 있으면 그 값, 없으면 ARM_POSES['home']"""
+        pose = C.get_pose("home")
+        init = self.adeept_init()
+        if init:
+            pose = {ch: float(init.get(ch, a)) for ch, a in pose.items()}
+        return pose
+
+    def steer_center(self) -> float:
+        init = self.adeept_init()
+        return float(init.get(C.CH_STEER, 90)) if init else 90.0
 
     # ---- 부품 (lazy) ----
     @property
@@ -488,13 +555,13 @@ class Robot:
     @property
     def steer(self) -> Steering:
         if self._steer is None:
-            self._steer = Steering(self.servos)
+            self._steer = Steering(self.servos, center=self.steer_center())
         return self._steer
 
     @property
     def arm(self) -> Arm:
         if self._arm is None:
-            self._arm = Arm(self.servos, self.sleep)
+            self._arm = Arm(self.servos, self.sleep, home_pose=self.home_pose())
         return self._arm
 
     @property

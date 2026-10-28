@@ -13,6 +13,8 @@ run_mission.py - 미션 실행 / 디버그 진입점
 하드웨어 없이 흐름만 확인 (PC/노트북):
   python3 run_mission.py --sim                  # 가짜 하드웨어로 1~5 전체
   python3 run_mission.py --sim --sim-direction RIGHT --only 3
+  (파이에서 --sim 을 돌리면 먼저 실제 서보를 RPIservo.py 의 init_pwm 초기값으로 되돌린 뒤 시뮬레이션합니다.
+   config.SIM_RESET_REAL_SERVOS=False 또는 --no-init 으로 끌 수 있음)
 
 점검 도구:
   --calibrate      키보드로 서보를 움직이며 포즈 각도 찾기 (p 로 config 에 붙여넣을 값 출력)
@@ -36,7 +38,7 @@ import traceback
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import config as C                                   # noqa: E402
-from hardware import make_robot, HardwareError       # noqa: E402
+from hardware import make_robot, reset_real_servos, HardwareError       # noqa: E402
 from missions import MissionContext, MissionRunner, ALL_MISSIONS   # noqa: E402
 
 log = logging.getLogger("run")
@@ -142,7 +144,7 @@ def tool_calibrate(robot):
         ",": (C.CH_STEER, -1), ".": (C.CH_STEER, +1),
     }
     print(CALIB_HELP)
-    _print_pose(servos)
+    _print_pose(robot)
     while True:
         ch = _getch()
         if ch == "x":
@@ -151,7 +153,7 @@ def tool_calibrate(robot):
             c, sign = keymap[ch]
             cur = servos.get(c) if servos.get(c) is not None else 90
             servos.write(c, cur + sign * steps[si])
-            _print_pose(servos)
+            _print_pose(robot)
         elif ch == "+":
             si = min(si + 1, len(steps) - 1)
             print("step = %d" % steps[si])
@@ -160,13 +162,14 @@ def tool_calibrate(robot):
             print("step = %d" % steps[si])
         elif ch == "o":
             arm.grip_open()
-            _print_pose(servos)
+            _print_pose(robot)
         elif ch == "c":
             arm.grip_close()
-            _print_pose(servos)
+            _print_pose(robot)
         elif ch == "h":
             arm.init_home()
-            _print_pose(servos)
+            robot.steer.center()
+            _print_pose(robot)
         elif ch == "g":
             name = input("\n포즈 이름 (%s): " % ", ".join(C.ARM_POSES)).strip()
             side = input("side (LEFT/RIGHT/엔터=없음): ").strip().upper() or None
@@ -174,9 +177,9 @@ def tool_calibrate(robot):
                 arm.pose(name, side=side)
             except KeyError as e:
                 print(e)
-            _print_pose(servos)
+            _print_pose(robot)
         elif ch == "p":
-            _print_pose(servos, as_config=True)
+            _print_pose(robot, as_config=True)
         elif ch == "u":
             print("ultra: raw=%s  median=%s" % (robot.ultra.read_raw(), robot.ultra.read()))
         elif ch == "r":
@@ -187,15 +190,18 @@ def tool_calibrate(robot):
     print("종료 (서보는 현재 위치 유지)")
 
 
-def _print_pose(servos, as_config=False):
+def _print_pose(robot, as_config=False):
+    servos = robot.servos
     chs = [C.CH_STEER, C.CH_BASE, C.CH_SHOULDER, C.CH_WRIST, C.CH_GRIP]
     vals = {c: servos.get(c) for c in chs}
     if as_config:
         arm = ", ".join("CH_%s: %d" % (C.CH_NAMES[c].upper(), round(vals[c] or 90))
                         for c in (C.CH_BASE, C.CH_SHOULDER, C.CH_WRIST, C.CH_GRIP))
+        center = robot.steer.center_angle
         print("\n  config.py 에 붙여넣기:   {%s}" % arm)
-        print("  base 만: BASE_xxx = %d   grip 만: GRIP_xxx = %d   steer trim: %d\n"
-              % (round(vals[C.CH_BASE] or 90), round(vals[C.CH_GRIP] or 90), round((vals[C.CH_STEER] or 90) - 90)))
+        print("  base 만: BASE_xxx = %d   grip 만: GRIP_xxx = %d   STEER_CENTER_TRIM = %d (중립 %.0f 기준)\n"
+              % (round(vals[C.CH_BASE] or 90), round(vals[C.CH_GRIP] or 90),
+                 round((vals[C.CH_STEER] if vals[C.CH_STEER] is not None else center) - center), center))
     else:
         print("\r  " + "  ".join("%s=%s" % (C.CH_NAMES[c], "?" if vals[c] is None else "%.0f" % vals[c]) for c in chs)
               + "      ", end="", flush=True)
@@ -311,7 +317,8 @@ def parse_args(argv=None):
     sel.add_argument("--direction", choices=["LEFT", "RIGHT"], help="QR 대신 방향을 미리 지정 (MISSION 1 생략)")
     sel.add_argument("--continue-on-error", action="store_true", help="미션이 실패해도 다음 미션 계속")
     sel.add_argument("--pause-steps", action="store_true", help="팔 동작(3,4)을 한 단계씩 Enter 로 진행")
-    sel.add_argument("--no-init", action="store_true", help="시작 시 서보 홈 이동 생략 (팔이 이미 홈에 있다고 가정)")
+    sel.add_argument("--no-init", action="store_true",
+                     help="시작 시 서보 홈 이동 생략 (팔이 이미 홈에 있다고 가정). --sim 의 실제 서보 리셋도 생략")
 
     sim = p.add_argument_group("시뮬레이션")
     sim.add_argument("--sim", action="store_true", help="하드웨어 없이 가짜 로봇으로 실행")
@@ -363,6 +370,10 @@ def main(argv=None) -> int:
     robot = make_robot(sim=args.sim, sim_direction=args.sim_direction, sim_speedup=args.sim_speedup)
     code = 0
     try:
+        # --sim: 먼저 실제 서보를 파이카 기본 초기값(RPIservo init_pwm)으로 되돌림 (하드웨어 없으면 자동 건너뜀)
+        if args.sim and C.SIM_RESET_REAL_SERVOS and not args.no_init:
+            reset_real_servos()
+
         # ---- 점검 도구 ----
         if args.stop:
             robot.drive.stop()
@@ -370,7 +381,7 @@ def main(argv=None) -> int:
         elif args.home:
             robot.arm.init_home()
             robot.steer.center()
-            print("홈 이동 완료")
+            print("홈 이동 완료: %s  steer=%.0f" % (robot.arm.current_pose(), robot.steer.center_angle))
         elif args.calibrate:
             tool_calibrate(robot)
         elif args.pose:
@@ -392,8 +403,9 @@ def main(argv=None) -> int:
             nums = select_missions(args)
             ctx = MissionContext(direction=args.direction, pause_steps=args.pause_steps)
             if args.no_init:
-                for ch, a in C.get_pose("home").items():
+                for ch, a in robot.home_pose().items():
                     robot.servos.angles[ch] = a
+                robot.servos.angles[C.CH_STEER] = robot.steer.center_angle
             else:
                 robot.arm.init_home()
             robot.steer.center()
