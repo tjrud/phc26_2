@@ -24,8 +24,10 @@ import os
 # =====================================================================
 # 1. 경로 / 로그
 # =====================================================================
-# Adeept Server 폴더 (Move.py, RPIservo.py, Ultra.py 가 있는 곳).
-# None 이면 이 폴더의 상위 폴더 → 이 폴더 → ~/Adeept_PiCar-Pro/Server 순으로 자동 탐색.
+# Adeept Server 폴더 (Move.py, RPIservo.py, Ultra.py 가 있는 곳). 이 저장소는 어디에 clone 해도 됩니다.
+# None 이면 자동 탐색: 이 폴더의 상위 폴더 → 이 폴더 → ~/Adeept_PiCar-Pro/Server (sudo 면 원래 사용자 홈도)
+#                    → /home/*/Adeept_PiCar-Pro/Server
+# Adeept 폴더가 다른 곳에 있을 때만 지정.  예) SERVER_DIR = "/home/pi/robot/Adeept_PiCar-Pro/Server"
 SERVER_DIR = None
 
 LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")

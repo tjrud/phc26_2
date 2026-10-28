@@ -16,10 +16,10 @@ mission/
 ## 1. 설치
 
 ```bash
-# 파이에서: Server 폴더 안에 mission 이라는 이름으로 clone (그래야 상위 폴더의 Move.py 등을 찾습니다)
-cd ~/Adeept_PiCar-Pro/Server
-git clone https://github.com/tjrud/phc26_2.git mission
-cd mission
+# 파이에서, 원하는 폴더 아무 데나 clone (예: 홈)
+cd ~
+git clone https://github.com/tjrud/phc26_2.git
+cd phc26_2
 
 sudo systemctl stop Adeept_Robot.service   # 부팅 시 뜨는 웹서버가 카메라/GPIO 를 잡고 있어서 먼저 정지
 python3 run_mission.py --sim               # 하드웨어 없이 흐름 확인 (설치 확인용)
@@ -29,7 +29,10 @@ python3 run_mission.py --home              # 서보 홈(90도) 이동 → 동작
 git pull
 ```
 
-(git 없이 복사하려면 `scp -r mission pi@<파이IP>:~/Adeept_PiCar-Pro/Server/`)
+Adeept 의 `Move.py`, `RPIservo.py`, `Ultra.py` 는 자동으로 찾습니다
+(이 폴더의 상위 폴더 → `~/Adeept_PiCar-Pro/Server` → `/home/*/Adeept_PiCar-Pro/Server` 순, sudo 로 실행해도 동작).
+Adeept 폴더가 다른 위치에 있으면 `config.py` 의 `SERVER_DIR` 에 경로를 적어 주세요.
+어떤 폴더를 잡았는지 보려면 `python3 run_mission.py --home --log-level DEBUG` (로그에 `Adeept Server 폴더: ...`).
 
 * 부팅 때마다 웹서버가 다시 뜨므로 매번 `stop` 하거나, `run_mission.py --stop-service` 로 자동 정지하세요.
   경기 끝나고 웹 UI 를 쓰려면 `sudo systemctl start Adeept_Robot.service`.

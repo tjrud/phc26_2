@@ -19,6 +19,7 @@ hardware.py - 하드웨어 래퍼
 필요 없는 장치(예: 초음파)를 건드리지 않습니다.
 """
 import collections
+import glob
 import logging
 import math
 import os
@@ -40,17 +41,30 @@ class HardwareError(RuntimeError):
 # =====================================================================
 # Adeept Server 폴더를 import 경로에 추가
 # =====================================================================
-def add_server_path() -> str:
+def server_dir_candidates() -> List[str]:
+    """Adeept Server 폴더(Move.py 가 있는 곳) 후보를 우선순위 순으로. 이 폴더는 어디에 clone 해도 됩니다."""
     here = os.path.dirname(os.path.abspath(__file__))
-    candidates = []
-    if C.SERVER_DIR:
-        candidates.append(C.SERVER_DIR)
-    candidates += [
-        os.path.dirname(here),                       # mission/ 이 Server/ 안에 있을 때
-        here,
-        os.path.expanduser("~/Adeept_PiCar-Pro/Server"),
-        "/home/pi/Adeept_PiCar-Pro/Server",
-    ]
+    cands = []
+    if C.SERVER_DIR:                                  # 1. config 에서 직접 지정
+        cands.append(os.path.expanduser(C.SERVER_DIR))
+    cands += [os.path.dirname(here), here]            # 2. 이 폴더의 상위 / 이 폴더 (Server/ 안에 clone 한 경우)
+    homes = [os.path.expanduser("~")]                 # 3. 홈 아래 기본 위치
+    sudo_user = os.environ.get("SUDO_USER")
+    if sudo_user:                                     #    sudo 로 실행하면 ~ 가 /root 가 되므로 원래 사용자 홈도 확인
+        homes.append(os.path.expanduser("~" + sudo_user))
+    for h in homes:
+        cands.append(os.path.join(h, "Adeept_PiCar-Pro", "Server"))
+    cands += sorted(glob.glob("/home/*/Adeept_PiCar-Pro/Server"))   # 4. 다른 사용자 홈
+    out = []
+    for d in cands:
+        d = os.path.normpath(d)
+        if d not in out:
+            out.append(d)
+    return out
+
+
+def add_server_path() -> str:
+    candidates = server_dir_candidates()
     for d in candidates:
         if os.path.isfile(os.path.join(d, "Move.py")):
             if d not in sys.path:
@@ -58,8 +72,8 @@ def add_server_path() -> str:
             log.debug("Adeept Server 폴더: %s", d)
             return d
     raise HardwareError(
-        "Adeept Server 폴더(Move.py)를 찾지 못했습니다. 이 폴더를 Adeept_PiCar-Pro/Server/ 안에 두거나 "
-        "config.SERVER_DIR 을 지정하세요. 찾아본 곳: %s" % candidates)
+        "Adeept Server 폴더(Move.py)를 찾지 못했습니다. config.py 의 SERVER_DIR 에 "
+        "Adeept_PiCar-Pro/Server 경로를 지정하세요. 찾아본 곳: %s" % candidates)
 
 
 def clamp(v, lo, hi):
