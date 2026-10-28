@@ -1,0 +1,13 @@
+# 실행 중 생기는 파일
+logs/
+__pycache__/
+*.pyc
+*.log
+*.jpg
+*.json
+
+# 편집기/OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
