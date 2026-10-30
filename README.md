@@ -10,7 +10,7 @@ mission/
 ├── hardware.py      하드웨어 래퍼 (Drive / Servos / Arm / Ultrasonic / Gyro / Camera / QR)
 ├── missions.py      Mission1 ~ Mission5 클래스, PrecisionStopper(정밀 정지), PickPlaceTask(집기/놓기)
 ├── run_mission.py   실행 진입점 + 점검 도구 (--calibrate, --test-* ...)
-├── debug_tool.py    디버그 웹 화면: 카메라/QR 인식 상태 확인 + 서보 각도 확인·조절
+├── debug_tool.py    디버그 웹 화면: 카메라/QR 인식 확인 + 서보 각도 조절 + 수동 주행(초음파 거리 표시)
 └── logs/            실행 로그(run_*.log), 결과(result_*.json), 카메라 스냅샷(qr_last.jpg)
 ```
 
@@ -61,6 +61,8 @@ python3 run_mission.py --continue-on-error     # 한 미션이 실패해도 끝�
 ### 디버그 화면 (debug_tool.py)
 
 QR 이 잘 안 읽히거나 팔 각도를 찾을 때 씁니다. 파이에서 실행하고, 같은 와이파이의 노트북/폰 브라우저로 접속합니다.
+Adeept 웹 화면처럼 주행도 되므로 이 화면 하나로 주행·QR 확인·팔 각도 찾기를 다 할 수 있습니다
+(카메라와 모터를 같이 쓰므로 `Adeept_Robot.service` 와 동시에는 못 켭니다. 먼저 정지하세요).
 
 ```bash
 python3 debug_tool.py          # 터미널에 나오는 주소(http://파이IP:8000)를 브라우저로 열기. 끝내려면 Ctrl+C
@@ -70,6 +72,11 @@ python3 debug_tool.py          # 터미널에 나오는 주소(http://파이IP:8
   밝기·선명도·QR 크기(px)·연속 인식 횟수와 안 읽히는 이유 힌트가 나옵니다.
   **[분석]** 을 누르면 지금 화면을 여러 방법(확대, 대비 향상, 이진화, 좌우 반전 ...)으로 읽어 보고 어떤 방법이 되는지 표로 보여 줍니다.
 * **카메라 조절**: ExposureValue(밝기 보정) / Contrast / Sharpness. 잘 읽히는 값이 나오면 화면의 `CAMERA_CONTROLS = {...}` 줄을 `config.py` 에.
+* **주행**: ▲▼ 전진/후진, ◀▶ 좌우 조향 버튼은 누르고 있는 동안만 움직이고 떼면 멈춥니다(조향은 가운데로). 키보드 ↑↓←→, 스페이스 = 정지.
+  속도 슬라이더 기본값은 `DRIVE_SPEED_FAST`. 와이파이가 끊기거나 탭을 닫아서 명령이 0.5초 동안 안 오면 자동으로 멈춥니다.
+  주행은 한 화면에서만 하세요. 다른 화면에서 버튼을 누르고 있으면 여기서 정지해도 바로 다시 움직입니다.
+* **초음파 거리**: 지금 거리와 정지선 기준 위치(빨간 선 / 노란 선 / 넘어감). **[펄스 ▲▼]** 는 정밀 정지에서 쓰는
+  펄스 한 번(`CREEP_SPEED`, `CREEP_PULSE_S`)만큼 움직이고 이동 거리를 보여 줍니다.
 * **서보**: steer / base / shoulder / wrist / grip 의 현재 각도, ± 스텝이나 숫자로 이동 (키보드 a/d, w/s, i/k, [ ], , . 도 가능).
   config 포즈로 이동, 집게 열기/닫기, base 좌/우, 모터 초기화.
 * **config 에 붙여넣기**: 지금 각도를 `{CH_SHOULDER: 138, CH_WRIST: 105}` 같은 형식으로 보여 줍니다. 스펀지를 잡을 수 있는 각도를 찾으면
@@ -102,7 +109,8 @@ QR 실제 내용: 출발 QR 은 `Left` / `Right`, 상자 QR 은 `PICK` / `PLACE`
 5. **초음파 보정 (가장 중요)** `python3 run_mission.py --measure-stopline`
    로봇의 초음파 센서를 빨간 정지선 위에 정확히 놓고 실행 → 출력되는 `ULTRA_OFFSET_CM` 값을 config 에 입력.
    (노트북의 어느 면에 초음파가 반사되느냐에 따라 측정값이 30 이 아닐 수 있어서 반드시 필요)
-6. **속도/펄스 확인** `--test-drive 25 1` (SLOW 속도에서 cm/s), `--test-pulse 5` (펄스당 이동 거리 0.5~1cm 가 되도록 `CREEP_SPEED`, `CREEP_PULSE_S`)
+6. **속도/펄스 확인** `--test-drive 25 1` (SLOW 속도에서 cm/s), `--test-pulse 5` (펄스당 이동 거리 0.5~1cm 가 되도록 `CREEP_SPEED`, `CREEP_PULSE_S`).
+   `debug_tool.py` 의 [펄스 ▲▼] 로도 한 번씩 움직여 보며 확인할 수 있습니다.
 7. **정밀 정지 반복** `--only 2` 를 여러 번 → 로그의 `[APPROACH] 정지 명령 ...cm → 멈춘 뒤 ...cm (밀림 x.xcm)` 의 밀림 값을
    `APPROACH_LEAD_CM` 에 넣으면 연속 주행이 31cm 근처에서 멈추고, 펄스는 1~2번이면 끝납니다.
    31cm 보다 더 들어가서 멈추면 `APPROACH_LEAD_CM` 을 키우세요 (정지선을 넘으면 실격).
@@ -140,4 +148,5 @@ QR 실제 내용: 출발 QR 은 `Left` / `Right`, 상자 QR 은 `PICK` / `PLACE`
 | 초음파 값이 튐 (None / 150 이상) | 노트북 면 각도, `ULTRA_MAX_VALID_CM`, `ULTRA_SAMPLES` ↑ |
 | QR 이 안 읽힘 | `debug_tool.py` 의 힌트와 [분석], `scan_qr` 포즈, 조명 반사, pyzbar 설치, `CAMERA_CONTROLS`, `CAMERA_SIZE` |
 | 물체를 넘어뜨림 | `SERVO_STEP_DELAY_S` ↑ (천천히), `pick_approach` → `pick_grab` 사이 경로 조정 |
+| 프로그램이 죽었는데 바퀴가 계속 돎 | 자동 정지는 `debug_tool.py` 가 살아 있어야 동작합니다. 전원을 끄거나 `python3 run_mission.py --home` (바퀴 정지. 조향과 팔도 기본값으로 움직이니 주의) |
 | 자이로 보정 켰더니 더 휨 | `--test-gyro` 로 부호 확인 (`GYRO_YAW_SIGN`), 아니면 `USE_GYRO_HEADING_HOLD = False` |
