@@ -141,8 +141,8 @@ HOME_OVERRIDE = {CH_SHOULDER: 100}   # 기본값 중 이 팔 채널만 따로 �
 SERVO_FAST_DRIVER = True    # True: PCA9685 객체를 한 번만 만들어 재사용 (부드럽고 빠름). 문제 있으면 False
 SERVO_LIMITS = {            # 기구 보호용 각도 제한 (절대각). 캘리브레이션 후 실제 가동범위로 줄이세요
     CH_STEER: (50, 130),
-    CH_BASE: (-5, 185),
-    CH_SHOULDER: (0, 200),
+    CH_BASE: (0, 180),
+    CH_SHOULDER: (0, 180),
     CH_WRIST: (0, 180),
     CH_GRIP: (0, 180),
 }
@@ -171,13 +171,13 @@ ARM_POSES = {
     # MISSION 2: 주행 중 팔 정리 자세 (모니터/상자에 안 닿게 위로)
     "drive":         {CH_BASE: 90, CH_SHOULDER: 60, CH_WRIST: 135, CH_GRIP: 90},
     # 물체를 든 채로 이동하는 높이 (base 회전 전후)
-    "carry":         {CH_SHOULDER: 150, CH_WRIST: 100},
+    "carry":         {CH_SHOULDER: 120, CH_WRIST: 135},
     # ↓ 집기/놓기는 팔을 멀리 뻗는 자세: shoulder ↑ = 팔을 내리며 앞으로, wrist ↑ = 손을 들어 앞으로.
     #   상자까지 모자라면 둘 다 더 키우고, 상자에 부딪히면 shoulder 를 줄이세요.
     # 상자 위 모서리에 세워진 물체 바로 앞 (집게 벌린 상태)
-    "pick_approach": {CH_SHOULDER: 180, CH_WRIST: 135},
+    "pick_approach": {CH_SHOULDER: 170, CH_WRIST: 135},
     # 집는 위치
-    "pick_grab":     {CH_SHOULDER: 170, CH_WRIST: 135},
+    "pick_grab":     {CH_SHOULDER: 180, CH_WRIST: 135},
     # 반대편 상자 안쪽 위 (여기서 집게를 벌려 떨어뜨림)
     "place_drop":    {CH_SHOULDER: 170, CH_WRIST: 135},
     # MISSION 5: 종료 자세
@@ -189,11 +189,11 @@ ARM_POSE_SIDE_OVERRIDE = {
     "LEFT": {
         "pick_approach": {CH_BASE: 180, CH_SHOULDER: 180, CH_WRIST: 135},
         "pick_grab":     {CH_BASE: 180, CH_SHOULDER: 170, CH_WRIST: 135},
-        "place_drop":    {CH_BASE: 160, CH_SHOULDER: 170, CH_WRIST: 115},
+        "place_drop":    {CH_BASE: 150, CH_SHOULDER: 170, CH_WRIST: 115},
     },
     "RIGHT": {
-        "pick_approach": {CH_BASE: 20, CH_SHOULDER: 180, CH_WRIST: 135},
-        "pick_grab":     {CH_BASE: 20, CH_SHOULDER: 170, CH_WRIST: 135},
+        "pick_approach": {CH_BASE: 30, CH_SHOULDER: 180, CH_WRIST: 135},
+        "pick_grab":     {CH_BASE: 30, CH_SHOULDER: 170, CH_WRIST: 135},
         "place_drop":    {CH_BASE: 0, CH_SHOULDER: 170, CH_WRIST: 115},
     },
 }
@@ -217,8 +217,7 @@ PICK_PLACE_SEQUENCE = [
     ("qr",   "PLACE"),
     ("pose", "place_drop"),
     ("grip", "open"),
-    ("pose", "carry"),
-    ("base", "CENTER"),
+    ("pose", "carry"),          # 가운데로 돌아가지 않고 다음 미션은 이 자리에서 시작 (마지막엔 MISSION 5 finish 포즈가 base 90)
 ]
 
 TUCK_ARM_BEFORE_DRIVE = True   # QR 인식 후 주행 전에 "drive" 포즈로 정리 (PDF TIP)
