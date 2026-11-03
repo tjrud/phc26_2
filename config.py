@@ -167,7 +167,7 @@ ARM_POSES = {
     # (HOME_OVERRIDE 에 있는 채널은 항상 그 값)
     "home":          {CH_BASE: 90, CH_SHOULDER: 100, CH_WRIST: 90, CH_GRIP: 90},
     # MISSION 1: 출발선에서 카메라가 모니터 QR 을 보는 자세 (필요하면 팔을 앞으로 뻗어 카메라를 모니터에 가깝게)
-    "scan_qr":       {CH_BASE: 90, CH_SHOULDER: 75, CH_WRIST: 90, CH_GRIP: 90},
+    "scan_qr":       {CH_BASE: 90, CH_SHOULDER: 110, CH_WRIST: 90, CH_GRIP: 90},
     # MISSION 2: 주행 중 팔 정리 자세 (모니터/상자에 안 닿게 위로)
     "drive":         {CH_BASE: 90, CH_SHOULDER: 60, CH_WRIST: 135, CH_GRIP: 90},
     # 물체를 든 채로 이동하는 높이 (base 회전 전후)
@@ -189,11 +189,11 @@ ARM_POSE_SIDE_OVERRIDE = {
     "LEFT": {
         "pick_approach": {CH_BASE: 180, CH_SHOULDER: 180, CH_WRIST: 135},
         "pick_grab":     {CH_BASE: 180, CH_SHOULDER: 170, CH_WRIST: 135},
-        "place_drop":    {CH_BASE: 150, CH_SHOULDER: 170, CH_WRIST: 115},
+        "place_drop":    {CH_BASE: 155, CH_SHOULDER: 170, CH_WRIST: 115},
     },
     "RIGHT": {
-        "pick_approach": {CH_BASE: 30, CH_SHOULDER: 180, CH_WRIST: 135},
-        "pick_grab":     {CH_BASE: 30, CH_SHOULDER: 170, CH_WRIST: 135},
+        "pick_approach": {CH_BASE: 25, CH_SHOULDER: 180, CH_WRIST: 135},
+        "pick_grab":     {CH_BASE: 25, CH_SHOULDER: 170, CH_WRIST: 135},
         "place_drop":    {CH_BASE: 0, CH_SHOULDER: 170, CH_WRIST: 115},
     },
 }
