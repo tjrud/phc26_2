@@ -516,7 +516,7 @@ class MissionRunner:
     def run(self) -> bool:
         by_num = {m.number: m for m in ALL_MISSIONS}
         all_ok = True
-        self.log.info("실행할 미션: %s  (방향=%s)", self.numbers, self.ctx.direction or "QR로 결정")
+        self.log.info("실행할 미션: %s  (방향=%s, 물체 배치=%s)", self.numbers, self.ctx.direction or "QR로 결정", C.PICK_LAYOUT)
         try:
             for n in self.numbers:
                 res = by_num[n](self.robot, self.ctx).run()
@@ -537,7 +537,7 @@ class MissionRunner:
         for n, r in sorted(self.ctx.results.items()):
             lines.append("│ M%d %-14s %s %6.1fs  %s" % (n, r.name[:14], "OK  " if r.ok else "FAIL", r.duration,
                                                        r.error or _short(r.info)))
-        lines.append("│ 방향: %s   총 %.1fs" % (self.ctx.direction, time.time() - self.ctx.t_start))
+        lines.append("│ 방향: %s   물체 배치: %s   총 %.1fs" % (self.ctx.direction, C.PICK_LAYOUT, time.time() - self.ctx.t_start))
         lines.append("└───────────────────────────")
         self.log.info("\n".join(lines))
 
@@ -545,7 +545,7 @@ class MissionRunner:
         try:
             os.makedirs(C.LOG_DIR, exist_ok=True)
             path = os.path.join(C.LOG_DIR, "result_%s.json" % time.strftime("%Y%m%d_%H%M%S"))
-            data = {"direction": self.ctx.direction,
+            data = {"direction": self.ctx.direction, "layout": C.PICK_LAYOUT,
                     "missions": [r.to_dict() for _, r in sorted(self.ctx.results.items())]}
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2, default=str)

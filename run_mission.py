@@ -10,6 +10,7 @@ run_mission.py - 미션 실행 / 디버그 진입점
   python3 run_mission.py --only 2               # MISSION 2 만 (정밀 정지 튜닝)
   python3 run_mission.py --from 3 --direction LEFT   # 정지선에 세워 놓고 3,4,5 만 (QR/주행 생략)
   python3 run_mission.py --only 3 --direction RIGHT --pause-steps   # 팔 동작을 한 단계씩 Enter 로 진행
+  python3 run_mission.py --layout RIGHT         # 상자 안 물체 배치가 반대일 때 (집기/놓기 base 를 서로 바꿈, QR 방향과 별개)
 
 점검 도구:
   --calibrate      키보드로 서보를 움직이며 포즈 각도 찾기 (p 로 config 에 붙여넣을 값 출력)
@@ -305,6 +306,8 @@ def parse_args(argv=None):
     sel.add_argument("--from", dest="from_", type=int, help="이 번호부터 5까지")
     sel.add_argument("--to", type=int, help="이 번호까지")
     sel.add_argument("--direction", choices=["LEFT", "RIGHT"], help="QR 대신 방향을 미리 지정 (MISSION 1 생략)")
+    sel.add_argument("--layout", choices=["LEFT", "RIGHT"],
+                     help="상자 안 물체 배치 (QR 방향과 별개). RIGHT = 집기/놓기 base 를 서로 바꿈. 없으면 config PICK_LAYOUT")
     sel.add_argument("--continue-on-error", action="store_true", help="미션이 실패해도 다음 미션 계속")
     sel.add_argument("--pause-steps", action="store_true", help="팔 동작(3,4)을 한 단계씩 Enter 로 진행")
 
@@ -345,6 +348,8 @@ def select_missions(args):
 
 def main(argv=None) -> int:
     args = parse_args(argv)
+    if args.layout:
+        C.PICK_LAYOUT = args.layout                 # --pose 로 확인할 때도 같은 배치가 적용되도록 맨 먼저
     setup_logging(args.log_level, to_file=not args.no_log_file)
     if not check_service(args):
         return 2

@@ -198,6 +198,12 @@ ARM_POSE_SIDE_OVERRIDE = {
     },
 }
 
+# 상자 안 물체 배치 (출발 QR 의 Left/Right 와는 별개). 실행할 때 run_mission.py --layout LEFT|RIGHT 로 바꿀 수 있음
+#   "LEFT"  : 위 ARM_POSE_SIDE_OVERRIDE 의 base 값 그대로
+#   "RIGHT" : 같은 상자 안에서 집기(pick_approach, pick_grab) base 와 놓기(place_drop) base 를 서로 바꿈
+#             shoulder / wrist 는 그대로 (집을 때는 pick_*, 놓을 때는 place_drop 값)
+PICK_LAYOUT = "LEFT"
+
 # 집기/놓기 동작 순서 (MISSION 3, 4 공용).  "PICK"/"PLACE" 는 실행 시 실제 방향(LEFT/RIGHT)으로 바뀝니다.
 #   ("pose", 이름)       : ARM_POSES 의 포즈로 이동
 #   ("base", 쪽)         : 팔 좌우 회전  ("PICK" | "PLACE" | "CENTER")
@@ -228,12 +234,18 @@ FINISH_POSE = "finish"         # MISSION 5 에서 취할 포즈
 # 헬퍼
 # =====================================================================
 def get_pose(name, side=None):
-    """포즈 이름 → {채널: 각도}. side('LEFT'/'RIGHT') 가 있으면 쪽별 덮어쓰기 적용."""
+    """포즈 이름 → {채널: 각도}. side('LEFT'/'RIGHT') 가 있으면 쪽별 덮어쓰기 적용.
+    PICK_LAYOUT 이 "RIGHT" 면 그 쪽 상자의 집기 base 와 놓기 base 를 서로 바꿈."""
     if name not in ARM_POSES:
         raise KeyError("ARM_POSES 에 '%s' 포즈가 없습니다. 있는 것: %s" % (name, ", ".join(ARM_POSES)))
     pose = dict(ARM_POSES[name])
     if side:
-        pose.update(ARM_POSE_SIDE_OVERRIDE.get(side, {}).get(name, {}))
+        over = ARM_POSE_SIDE_OVERRIDE.get(side, {})
+        pose.update(over.get(name, {}))
+        if PICK_LAYOUT == "RIGHT" and name in ("pick_approach", "pick_grab", "place_drop"):
+            swap = over.get("pick_grab" if name == "place_drop" else "place_drop", {})
+            if CH_BASE in swap:
+                pose[CH_BASE] = swap[CH_BASE]
     return pose
 
 

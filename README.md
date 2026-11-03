@@ -49,7 +49,12 @@ python3 run_mission.py --only 1                # QR 인식만
 python3 run_mission.py --from 3 --direction LEFT          # 정지선에 세워 두고 3,4,5 만 (QR/주행 생략)
 python3 run_mission.py --only 3 --direction RIGHT --pause-steps   # 팔 동작을 Enter 로 한 단계씩
 python3 run_mission.py --continue-on-error     # 한 미션이 실패해도 끝까지
+python3 run_mission.py --layout RIGHT          # 상자 안 물체 배치가 반대일 때 (아래 설명)
 ```
+
+`--layout` 은 출발 QR 의 Left/Right 와 별개입니다. QR 은 어느 상자부터 집을지(미션 3, 4 순서)를 정하고,
+`--layout` 은 각 상자 안에서 집는 자리와 놓는 자리를 정합니다. `LEFT`(기본, config `PICK_LAYOUT`)는
+`ARM_POSE_SIDE_OVERRIDE` 의 base 값 그대로, `RIGHT` 는 같은 상자 안에서 집기 base 와 놓기 base 를 서로 바꿉니다.
 
 실행하면 `logs/run_날짜.log` 에 전체 로그, `logs/result_날짜.json` 에 미션별 결과(정지 거리, 방향, 소요 시간)가 남습니다.
 
