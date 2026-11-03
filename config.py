@@ -141,8 +141,8 @@ HOME_OVERRIDE = {CH_SHOULDER: 100}   # 기본값 중 이 팔 채널만 따로 �
 SERVO_FAST_DRIVER = True    # True: PCA9685 객체를 한 번만 만들어 재사용 (부드럽고 빠름). 문제 있으면 False
 SERVO_LIMITS = {            # 기구 보호용 각도 제한 (절대각). 캘리브레이션 후 실제 가동범위로 줄이세요
     CH_STEER: (50, 130),
-    CH_BASE: (0, 180),
-    CH_SHOULDER: (0, 180),
+    CH_BASE: (-5, 185),
+    CH_SHOULDER: (0, 200),
     CH_WRIST: (0, 180),
     CH_GRIP: (0, 180),
 }
@@ -150,44 +150,52 @@ SERVO_STEP_DEG = 2          # 보간 이동 시 한 스텝 각도
 SERVO_STEP_DELAY_S = 0.02   # 스텝 간 대기 (작을수록 빠름; 물체를 넘어뜨리면 키우세요)
 SERVO_SETTLE_S = 0.4        # 포즈 도착 후 대기
 GRIP_STEP_DELAY_S = 0.01
-GRIP_SETTLE_S = 0.6         # 집게 잡기/놓기 후 대기
+GRIP_SETTLE_S = 0.2        # 집게 잡기/놓기 후 대기
 
 # ---- 집게 ----
 GRIP_OPEN = 130
-GRIP_CLOSED = 60
+GRIP_CLOSED = 50
 
 # ---- 팔 좌우 회전(base) 각도 ----
 BASE_CENTER = 90
-BASE_LEFT = 170             # 왼쪽 상자를 향하는 각도
-BASE_RIGHT = 10             # 오른쪽 상자를 향하는 각도
+BASE_LEFT = 180           # 왼쪽 상자를 향하는 각도
+BASE_RIGHT = 0            # 오른쪽 상자를 향하는 각도
 
 # ---- 포즈 (절대각). 아래 값은 전부 "자리표시자" 입니다. 반드시 --calibrate 로 실제 값을 찾아 넣으세요 ----
 ARM_POSES = {
     # 홈 포즈. USE_ADEEPT_INIT_AS_HOME=True 면 RPIservo.py 의 init_pwm 값이 대신 쓰이고, 이 값은 못 읽을 때의 대체값
     # (HOME_OVERRIDE 에 있는 채널은 항상 그 값)
-    "home":          {CH_BASE: 90, CH_SHOULDER: 90, CH_WRIST: 90, CH_GRIP: 90},
+    "home":          {CH_BASE: 90, CH_SHOULDER: 100, CH_WRIST: 90, CH_GRIP: 90},
     # MISSION 1: 출발선에서 카메라가 모니터 QR 을 보는 자세 (필요하면 팔을 앞으로 뻗어 카메라를 모니터에 가깝게)
     "scan_qr":       {CH_BASE: 90, CH_SHOULDER: 75, CH_WRIST: 90, CH_GRIP: 90},
     # MISSION 2: 주행 중 팔 정리 자세 (모니터/상자에 안 닿게 위로)
-    "drive":         {CH_BASE: 90, CH_SHOULDER: 60, CH_WRIST: 110, CH_GRIP: 90},
+    "drive":         {CH_BASE: 90, CH_SHOULDER: 60, CH_WRIST: 135, CH_GRIP: 90},
     # 물체를 든 채로 이동하는 높이 (base 회전 전후)
-    "carry":         {CH_SHOULDER: 60, CH_WRIST: 100},
+    "carry":         {CH_SHOULDER: 150, CH_WRIST: 100},
     # ↓ 집기/놓기는 팔을 멀리 뻗는 자세: shoulder ↑ = 팔을 내리며 앞으로, wrist ↑ = 손을 들어 앞으로.
     #   상자까지 모자라면 둘 다 더 키우고, 상자에 부딪히면 shoulder 를 줄이세요.
     # 상자 위 모서리에 세워진 물체 바로 앞 (집게 벌린 상태)
-    "pick_approach": {CH_SHOULDER: 125, CH_WRIST: 110},
+    "pick_approach": {CH_SHOULDER: 180, CH_WRIST: 135},
     # 집는 위치
-    "pick_grab":     {CH_SHOULDER: 138, CH_WRIST: 105},
+    "pick_grab":     {CH_SHOULDER: 170, CH_WRIST: 135},
     # 반대편 상자 안쪽 위 (여기서 집게를 벌려 떨어뜨림)
-    "place_drop":    {CH_SHOULDER: 130, CH_WRIST: 115},
+    "place_drop":    {CH_SHOULDER: 170, CH_WRIST: 135},
     # MISSION 5: 종료 자세
-    "finish":        {CH_BASE: 90, CH_SHOULDER: 60, CH_WRIST: 110, CH_GRIP: 90},
+    "finish":        {CH_BASE: 90, CH_SHOULDER: 120, CH_WRIST: 90, CH_GRIP: 90},
 }
 
 # 좌/우가 완전히 대칭이 아니면 쪽별로 포즈 일부만 덮어쓰기.  예) "LEFT": {"pick_grab": {CH_WRIST: 80}}
 ARM_POSE_SIDE_OVERRIDE = {
-    "LEFT": {},
-    "RIGHT": {},
+    "LEFT": {
+        "pick_approach": {CH_BASE: 180, CH_SHOULDER: 180, CH_WRIST: 135},
+        "pick_grab":     {CH_BASE: 180, CH_SHOULDER: 170, CH_WRIST: 135},
+        "place_drop":    {CH_BASE: 160, CH_SHOULDER: 170, CH_WRIST: 115},
+    },
+    "RIGHT": {
+        "pick_approach": {CH_BASE: 20, CH_SHOULDER: 180, CH_WRIST: 135},
+        "pick_grab":     {CH_BASE: 20, CH_SHOULDER: 170, CH_WRIST: 135},
+        "place_drop":    {CH_BASE: 0, CH_SHOULDER: 170, CH_WRIST: 115},
+    },
 }
 
 # 집기/놓기 동작 순서 (MISSION 3, 4 공용).  "PICK"/"PLACE" 는 실행 시 실제 방향(LEFT/RIGHT)으로 바뀝니다.
