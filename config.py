@@ -169,7 +169,7 @@ ARM_POSES = {
     # MISSION 1: 출발선에서 카메라가 모니터 QR 을 보는 자세 (필요하면 팔을 앞으로 뻗어 카메라를 모니터에 가깝게)
     "scan_qr":       {CH_BASE: 90, CH_SHOULDER: 110, CH_WRIST: 90, CH_GRIP: 90},
     # MISSION 2: 주행 중 팔 정리 자세 (모니터/상자에 안 닿게 위로)
-    "drive":         {CH_BASE: 90, CH_SHOULDER: 60, CH_WRIST: 135, CH_GRIP: 90},
+    "drive":         {CH_BASE: 90, CH_SHOULDER: 110, CH_WRIST: 135, CH_GRIP: 90},
     # 물체를 든 채로 이동하는 높이 (base 회전 전후)
     "carry":         {CH_SHOULDER: 120, CH_WRIST: 135},
     # ↓ 집기/놓기는 팔을 멀리 뻗는 자세: shoulder ↑ = 팔을 내리며 앞으로, wrist ↑ = 손을 들어 앞으로.
