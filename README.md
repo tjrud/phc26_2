@@ -135,7 +135,8 @@ QR 실제 내용: 출발 QR 은 `Left` / `Right`, 상자 QR 은 `PICK` / `PLACE`
 ## 6. 규칙과 코드의 관계 (PDF 주의사항)
 
 * 정지 후 팔이 움직인 뒤 바퀴가 움직이면 실격 → MISSION 3 부터는 모터 명령이 전혀 없습니다. 위치 보정(후진 포함)은 전부 MISSION 2 안에서 끝납니다.
-* 정지선을 넘으면 실격 → `APPROACH_LEAD_CM` 은 넉넉히, `ALLOW_REVERSE_FIX` 로 살짝 지나친 건 되돌립니다(`REVERSE_FIX_LIMIT_CM` 이내만).
+* 정지선을 넘으면 실격 → `APPROACH_LEAD_CM` 은 넉넉히. 넘어가면 `ALLOW_REVERSE_FIX` 로 후진 펄스를 넣어 되돌리고,
+  정지 판정(RED/YELLOW/OVER/SHORT)과 상관없이 다음 미션으로 넘어갑니다.
 * 팔이 모니터에 닿으면 실격 → `drive` / `scan_qr` 포즈 높이를 확인하세요.
 * 잘못된 상자에 넣으면 실격 → `BASE_LEFT` 가 실제로 로봇 기준 **왼쪽** 상자를 향하는지 `--pose` 로 꼭 확인.
 * QR 인식 후에 움직여야 함 → `scan_qr` 포즈는 시작 버튼 전에 잡고, 인식 후에 팔 정리·주행을 시작합니다.

@@ -201,12 +201,11 @@ class Mission2DriveAndStop(Mission):
         result = stopper.run()
         res.info.update(result)
         zone = result["zone"]
-        if zone in ("RED", "YELLOW"):
-            res.ok = True
-            if zone == "YELLOW":
-                self.log.warning("노란선 정지 (감점). 오차 %.1fcm", result["error_cm"])
-        else:
-            self.fail("정지 실패: %s (최종 %.1fcm, 오차 %.1fcm)" % (zone, result["final_cm"], result["error_cm"]))
+        if zone == "YELLOW":
+            self.log.warning("노란선 정지 (감점). 오차 %.1fcm", result["error_cm"])
+        elif zone != "RED":
+            self.log.warning("정밀 정지 실패: %s (최종 %s cm) → 그래도 다음 미션 진행", zone, result["final_cm"])
+        res.ok = True
 
 
 class PrecisionStopper:
@@ -336,10 +335,8 @@ class PrecisionStopper:
                 if not C.ALLOW_REVERSE_FIX:
                     self.log.warning("[CREEP] 목표 지나침, 후진 보정 비활성 (ALLOW_REVERSE_FIX)")
                     return d, i - 1
-                if -err > C.REVERSE_FIX_LIMIT_CM:
-                    self.log.error("[CREEP] %.1fcm 넘어감 (실격 영역) → 보정 포기", -err)
-                    return d, i - 1
-                robot.drive.pulse(-1, C.CREEP_SPEED, pulse_s)
+                dur = pulse_s * (C.CREEP_FAR_MULTIPLIER if -err > 3.0 else 1.0)    # 많이 넘어갔으면 크게 후진
+                robot.drive.pulse(-1, C.CREEP_SPEED, dur)
             prev, prev_sign = d, sign
             robot.sleep(C.CREEP_SETTLE_S)
         self.log.warning("[CREEP] 최대 펄스 횟수(%d) 도달", C.MAX_CREEP_PULSES)

@@ -97,8 +97,7 @@ CREEP_STALL_CM = 0.2        # 펄스 후 이동이 이보다 작으면 "안 움�
 CREEP_FAR_MULTIPLIER = 2.0  # 목표까지 3cm 이상 남았으면 펄스 길이 x2
 CREEP_SETTLE_S = 0.7        # 펄스 후 측정까지 대기 (gpiozero 가 9샘플 중앙값을 쓰므로 0.6s 이상 권장)
 MAX_CREEP_PULSES = 40
-ALLOW_REVERSE_FIX = True    # 목표보다 더 들어갔을 때 살짝 후진 허용 (팔이 움직이기 전까지만 가능)
-REVERSE_FIX_LIMIT_CM = 2.5  # 이보다 더 넘어갔으면(실격 영역) 후진 시도 안 함
+ALLOW_REVERSE_FIX = True    # 목표보다 더 들어갔으면 넘어간 거리와 상관없이 후진해서 되돌림 (팔이 움직이기 전, MISSION 2 안에서)
 
 # 초음파
 ULTRA_MODE = "adeept"       # "adeept" = Server/Ultra.py 재사용 (9샘플 중앙값, 반응 느림)
