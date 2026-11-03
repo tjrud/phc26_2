@@ -56,13 +56,14 @@ python3 run_mission.py --continue-on-error     # 한 미션이 실패해도 끝�
 **실행하면 항상 모터 초기화부터.** 어떤 옵션으로 실행하든 가장 먼저 바퀴 모터를 정지하고 조향/팔 서보를 기본값으로 보냅니다.
 기본값은 `Server/RPIservo.py` 의 `init_pwm0~7`(웹서버가 켜질 때 서보가 가는 위치)이고, 홈 포즈(`--home`, `--calibrate` 의 `h`)와
 조향 중립도 같은 값을 씁니다. RPIservo.py 를 못 읽으면 `config.py` 의 `ARM_POSES["home"]` / 조향 90.
-기본값 대신 config 값을 쓰려면 `USE_ADEEPT_INIT_AS_HOME = False`.
+기본값 대신 config 값을 쓰려면 `USE_ADEEPT_INIT_AS_HOME = False`. 팔 채널 일부만 바꾸려면 `HOME_OVERRIDE` (지금은 shoulder 100).
 
 ### 디버그 화면 (debug_tool.py)
 
 QR 이 잘 안 읽히거나 팔 각도를 찾을 때 씁니다. 파이에서 실행하고, 같은 와이파이의 노트북/폰 브라우저로 접속합니다.
 Adeept 웹 화면처럼 주행도 되므로 이 화면 하나로 주행·QR 확인·팔 각도 찾기를 다 할 수 있습니다
 (카메라와 모터를 같이 쓰므로 `Adeept_Robot.service` 와 동시에는 못 켭니다. 먼저 정지하세요).
+`run_mission.py` 도 마찬가지라서, 미션을 돌리기 전에 디버그 화면은 Ctrl+C 로 끄세요.
 
 ```bash
 python3 debug_tool.py          # 터미널에 나오는 주소(http://파이IP:8000)를 브라우저로 열기. 끝내려면 Ctrl+C

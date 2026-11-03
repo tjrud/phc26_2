@@ -500,11 +500,12 @@ class Robot:
         return self._adeept_init or None
 
     def home_pose(self) -> Dict[int, float]:
-        """홈 포즈 (팔 채널). RPIservo init_pwm 이 있으면 그 값, 없으면 ARM_POSES['home']"""
+        """홈 포즈 (팔 채널). RPIservo init_pwm 이 있으면 그 값, 없으면 ARM_POSES['home']. HOME_OVERRIDE 채널은 항상 그 값"""
         pose = C.get_pose("home")
         init = self.adeept_init()
         if init:
             pose = {ch: float(init.get(ch, a)) for ch, a in pose.items()}
+        pose.update({ch: float(a) for ch, a in C.HOME_OVERRIDE.items() if ch in pose})    # 조향(ch0)은 대상 아님
         return pose
 
     def steer_center(self) -> float:

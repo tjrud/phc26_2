@@ -136,6 +136,7 @@ CH_NAMES = {CH_STEER: "steer", CH_BASE: "base", CH_SHOULDER: "shoulder", CH_WRIS
 # run_mission.py 는 실행하자마자 모터 초기화(바퀴 정지 → 조향/팔 서보를 이 기본값으로 즉시 이동)부터 합니다.
 # 홈 포즈(--home, --calibrate 의 h)와 조향 중립도 같은 값.
 USE_ADEEPT_INIT_AS_HOME = True   # True: RPIservo.py 의 init_pwm 값 사용 (못 읽으면 ARM_POSES["home"] / 조향 90)
+HOME_OVERRIDE = {CH_SHOULDER: 100}   # 기본값 중 이 팔 채널만 따로 지정 (위의 어느 값보다 우선). 조향 중립은 STEER_CENTER_TRIM 으로
 
 SERVO_FAST_DRIVER = True    # True: PCA9685 객체를 한 번만 만들어 재사용 (부드럽고 빠름). 문제 있으면 False
 SERVO_LIMITS = {            # 기구 보호용 각도 제한 (절대각). 캘리브레이션 후 실제 가동범위로 줄이세요
@@ -163,6 +164,7 @@ BASE_RIGHT = 10             # 오른쪽 상자를 향하는 각도
 # ---- 포즈 (절대각). 아래 값은 전부 "자리표시자" 입니다. 반드시 --calibrate 로 실제 값을 찾아 넣으세요 ----
 ARM_POSES = {
     # 홈 포즈. USE_ADEEPT_INIT_AS_HOME=True 면 RPIservo.py 의 init_pwm 값이 대신 쓰이고, 이 값은 못 읽을 때의 대체값
+    # (HOME_OVERRIDE 에 있는 채널은 항상 그 값)
     "home":          {CH_BASE: 90, CH_SHOULDER: 90, CH_WRIST: 90, CH_GRIP: 90},
     # MISSION 1: 출발선에서 카메라가 모니터 QR 을 보는 자세 (필요하면 팔을 앞으로 뻗어 카메라를 모니터에 가깝게)
     "scan_qr":       {CH_BASE: 90, CH_SHOULDER: 75, CH_WRIST: 90, CH_GRIP: 90},
