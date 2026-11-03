@@ -156,20 +156,22 @@ class Servos:
     def get(self, ch: int) -> Optional[float]:
         return self.angles.get(ch)
 
-    def move_to(self, targets: Dict[int, float], step_deg: float = None, step_delay: float = None):
-        """여러 채널을 동시에 보간 이동. 현재 각도를 모르는 채널은 즉시 이동."""
+    def move_to(self, targets: Dict[int, float], step_deg: float = None, step_delay: float = None) -> bool:
+        """여러 채널을 동시에 보간 이동. 현재 각도를 모르는 채널은 즉시 이동. 움직인 채널이 있으면 True"""
         step_deg = step_deg or C.SERVO_STEP_DEG
         step_delay = C.SERVO_STEP_DELAY_S if step_delay is None else step_delay
         starts, goals = {}, {}
+        moved = False
         for ch, a in targets.items():
             goal = self._limit(ch, a)
             cur = self.angles.get(ch)
             if cur is None:
                 self.write(ch, goal)
+                moved = True
             elif abs(cur - goal) > 1e-6:
                 starts[ch], goals[ch] = cur, goal
         if not goals:
-            return
+            return moved
         n = max(1, int(math.ceil(max(abs(goals[c] - starts[c]) for c in goals) / step_deg)))
         for i in range(1, n + 1):
             for ch in goals:
@@ -178,6 +180,7 @@ class Servos:
                 self.angles[ch] = a
             self._sleep(step_delay)
         log.debug("servo move_to %s (%d steps)", _fmt_pose(goals), n)
+        return True
 
 
 class Steering:
@@ -216,18 +219,18 @@ class Arm:
         """ARM_POSES 의 포즈로 보간 이동. speed>1 이면 빠르게, <1 이면 느리게. 'home' 은 RPIservo 초기값 기준"""
         targets = self.home_pose if name == "home" else C.get_pose(name, side)
         log.info("arm pose '%s'%s → %s", name, " (%s)" % side if side else "", _fmt_pose(targets))
-        self.servos.move_to(targets, step_delay=C.SERVO_STEP_DELAY_S / max(speed, 1e-3))
-        self._sleep(C.SERVO_SETTLE_S if settle is None else settle)
+        if self.servos.move_to(targets, step_delay=C.SERVO_STEP_DELAY_S / max(speed, 1e-3)):    # 이미 그 자세면 기다리지 않음
+            self._sleep(C.SERVO_SETTLE_S if settle is None else settle)
 
     def base_to(self, side_or_angle, settle: float = None):
         angle = C.base_angle(side_or_angle) if isinstance(side_or_angle, str) else float(side_or_angle)
         log.info("arm base → %s (%.0f°)", side_or_angle, angle)
-        self.servos.move_to({C.CH_BASE: angle})
-        self._sleep(C.SERVO_SETTLE_S if settle is None else settle)
+        if self.servos.move_to({C.CH_BASE: angle}):
+            self._sleep(C.SERVO_SETTLE_S if settle is None else settle)
 
     def grip(self, angle: float, settle: float = None):
-        self.servos.move_to({C.CH_GRIP: angle}, step_delay=C.GRIP_STEP_DELAY_S)
-        self._sleep(C.GRIP_SETTLE_S if settle is None else settle)
+        if self.servos.move_to({C.CH_GRIP: angle}, step_delay=C.GRIP_STEP_DELAY_S):
+            self._sleep(C.GRIP_SETTLE_S if settle is None else settle)
 
     def grip_open(self):
         log.info("grip open (%d°)", C.GRIP_OPEN)

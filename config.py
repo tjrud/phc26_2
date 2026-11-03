@@ -53,7 +53,7 @@ QR_SAVE_DEBUG_FRAME_S = 3.0 # 대기 중 logs/qr_last.jpg 저장 주기 (0 = 저
 QR_TRY_UPSCALE = True       # 인식 실패 시 1.5배 확대해서 재시도 (멀리 있는 작은 QR용)
 
 # 상자 PICK / PLACE QR 확인:  "off" = 안 함, "log" = 보이는지 기록만, "require" = 안 보이면 미션 실패
-QR_BOX_CHECK_MODE = "log"
+QR_BOX_CHECK_MODE = "off"
 QR_BOX_CHECK_TIMEOUT_S = 1.0
 
 # =====================================================================
@@ -148,7 +148,7 @@ SERVO_LIMITS = {            # 기구 보호용 각도 제한 (절대각). 캘리
 }
 SERVO_STEP_DEG = 2          # 보간 이동 시 한 스텝 각도
 SERVO_STEP_DELAY_S = 0.02   # 스텝 간 대기 (작을수록 빠름; 물체를 넘어뜨리면 키우세요)
-SERVO_SETTLE_S = 0.4        # 포즈 도착 후 대기
+SERVO_SETTLE_S = 0.05       # 포즈 도착 후 대기 (자세가 그대로인 단계는 기다리지 않음)
 GRIP_STEP_DELAY_S = 0.01
 GRIP_SETTLE_S = 0.2        # 집게 잡기/놓기 후 대기
 
