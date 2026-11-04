@@ -77,7 +77,7 @@ RED_HALF_WIDTH_CM = 1.0     # 빨간선 반폭 (폭 2cm)  → 29~31cm = 만점
 YELLOW_HALF_WIDTH_CM = 3.0  # 노란선 바깥 경계      → 27~33cm = 감점, 27 미만 = 실격(넘어감)
 
 # 접근: APPROACH_CM 까지는 펄스 없이 연속 주행으로 빠르게 → 정지 → 펄스(creep)로 앞/뒤 움직여 STOP_TARGET_CM 에 맞춤
-APPROACH_CM = 34        # 연속 주행으로 다가갈 거리
+APPROACH_CM = 31        # 연속 주행으로 다가갈 거리
 APPROACH_LEAD_CM = 5     # 정지 명령 뒤 더 밀리는 거리 (초음파 지연 + 관성). APPROACH_CM + 이 값을 읽으면 모터 정지.
                             # 로그의 "[APPROACH] ... 밀림 x.xcm" 값을 넣으면 APPROACH_CM 에 맞춰 섭니다 (더 들어가면 키우세요)
 DRIVE_SPEED_FAST = 40       # 0~100
