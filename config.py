@@ -191,8 +191,8 @@ ARM_POSE_SIDE_OVERRIDE = {
         "place_drop":    {CH_BASE: 150, CH_SHOULDER: 180, CH_WRIST: 145},
     },
     "RIGHT": {
-        "pick_approach": {CH_BASE: 20, CH_SHOULDER: 180, CH_WRIST: 145},
-        "pick_grab":     {CH_BASE: 20, CH_SHOULDER: 180, CH_WRIST: 145},
+        "pick_approach": {CH_BASE: 0, CH_SHOULDER: 180, CH_WRIST: 140},
+        "pick_grab":     {CH_BASE: 0, CH_SHOULDER: 180, CH_WRIST: 140},
         "place_drop":    {CH_BASE: 0, CH_SHOULDER: 180, CH_WRIST: 145},
     },
 }
@@ -210,8 +210,8 @@ PICK_LAYOUT = "LEFT"
 #   ("qr", "PICK"/"PLACE"): 상자 QR 확인 (QR_BOX_CHECK_MODE 에 따라)
 #   ("wait", 초)
 PICK_PLACE_SEQUENCE = [
+    ("grip", "open"),           # 팔을 움직이기 전에 집게부터 열기
     ("pose", "carry"),
-    ("grip", "open"),
     ("base", "PICK"),
     ("qr",   "PICK"),
     ("pose", "pick_approach"),
