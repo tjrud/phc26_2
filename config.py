@@ -188,11 +188,11 @@ ARM_POSE_SIDE_OVERRIDE = {
     "LEFT": {
         "pick_approach": {CH_BASE: 180, CH_SHOULDER: 180, CH_WRIST: 135},
         "pick_grab":     {CH_BASE: 180, CH_SHOULDER: 170, CH_WRIST: 135},
-        "place_drop":    {CH_BASE: 155, CH_SHOULDER: 170, CH_WRIST: 115},
+        "place_drop":    {CH_BASE: 160, CH_SHOULDER: 170, CH_WRIST: 115},
     },
     "RIGHT": {
-        "pick_approach": {CH_BASE: 25, CH_SHOULDER: 180, CH_WRIST: 135},
-        "pick_grab":     {CH_BASE: 25, CH_SHOULDER: 170, CH_WRIST: 135},
+        "pick_approach": {CH_BASE: 20, CH_SHOULDER: 180, CH_WRIST: 145},
+        "pick_grab":     {CH_BASE: 20, CH_SHOULDER: 180, CH_WRIST: 145},
         "place_drop":    {CH_BASE: 0, CH_SHOULDER: 170, CH_WRIST: 115},
     },
 }
